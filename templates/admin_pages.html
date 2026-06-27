@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+{% block title %}Quản lý fanpage – {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="page-hero mb-4">
+    <h1 class="h3 fw-bold mb-1"><i class="bi bi-diagram-3 me-2"></i>Quản lý Fanpage</h1>
+    <p class="mb-0 opacity-90">{{ pages|length }} page — tạo, chỉnh sửa và phân quyền nhân viên.</p>
+</div>
+
+<div class="row g-4">
+
+    <!-- Create page -->
+    <div class="col-lg-4">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body p-4">
+                <h6 class="fw-bold mb-3"><i class="bi bi-plus-circle me-2 text-primary"></i>Thêm fanpage</h6>
+                <form method="POST">
+                    <input type="hidden" name="action" value="create">
+                    <div class="mb-3">
+                        <label class="form-label small text-muted">Tên page <span class="text-danger">*</span></label>
+                        <input type="text" name="name" class="form-control" required placeholder="vd: Shop ABC – Hà Nội">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small text-muted">Link Facebook</label>
+                        <input type="url" name="fb_url" class="form-control" placeholder="https://facebook.com/...">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small text-muted">Ghi chú</label>
+                        <input type="text" name="description" class="form-control" placeholder="Mô tả ngắn">
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="bi bi-plus-lg me-1"></i>Tạo fanpage
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Page list -->
+    <div class="col-lg-8">
+        {% if pages %}
+        <div class="d-flex flex-column gap-3">
+            {% for page in pages %}
+            <div class="card border-0 shadow-sm">
+                <div class="card-body p-4">
+                    <div class="row g-3 align-items-start">
+
+                        <!-- Info -->
+                        <div class="col-md-5">
+                            <div class="d-flex align-items-center gap-2 mb-2">
+                                <div style="width:36px;height:36px;border-radius:50%;
+                                            background:linear-gradient(135deg,#1877f2,#0d5dbf);
+                                            display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                                    <i class="bi bi-facebook text-white"></i>
+                                </div>
+                                <div>
+                                    <div class="fw-bold">{{ page.name }}</div>
+                                    {% if page.description %}
+                                    <div class="text-muted small">{{ page.description }}</div>
+                                    {% endif %}
+                                    {% if page.fb_url %}
+                                    <a href="{{ page.fb_url }}" target="_blank" class="small text-primary">
+                                        <i class="bi bi-link-45deg"></i> Xem page
+                                    </a>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="d-flex gap-2">
+                                <button class="btn btn-sm btn-outline-secondary"
+                                        data-bs-toggle="modal"
+                                        data-bs-target="#editModal{{ page.id }}">
+                                    <i class="bi bi-pencil me-1"></i>Sửa
+                                </button>
+                                <form method="POST"
+                                      onsubmit="return confirm('Xoá page {{ page.name }}? Toàn bộ lịch sẽ bị xoá.')">
+                                    <input type="hidden" name="action" value="delete">
+                                    <input type="hidden" name="page_id" value="{{ page.id }}">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger">
+                                        <i class="bi bi-trash me-1"></i>Xoá
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+
+                        <!-- Assigned users -->
+                        <div class="col-md-7">
+                            <div class="small fw-semibold text-muted mb-2">
+                                <i class="bi bi-people me-1"></i>Nhân viên phụ trách
+                            </div>
+
+                            {% set assigned = page_users[page.id] %}
+                            {% if assigned %}
+                            <div class="d-flex flex-wrap gap-2 mb-2">
+                                {% for u in assigned %}
+                                <form method="POST" class="d-inline">
+                                    <input type="hidden" name="action" value="unassign">
+                                    <input type="hidden" name="page_id" value="{{ page.id }}">
+                                    <input type="hidden" name="user_id" value="{{ u.id }}">
+                                    <button type="submit" class="btn btn-sm btn-light border"
+                                            title="Bỏ phân quyền {{ u.username }}">
+                                        <i class="bi bi-person-check-fill text-primary me-1"></i>{{ u.username }}
+                                        <i class="bi bi-x text-danger ms-1"></i>
+                                    </button>
+                                </form>
+                                {% endfor %}
+                            </div>
+                            {% else %}
+                            <p class="text-muted small mb-2">Chưa phân quyền nhân viên nào.</p>
+                            {% endif %}
+
+                            <!-- Assign new user -->
+                            {% set unassigned = page_unassigned[page.id] %}
+                            {% if unassigned %}
+                            <form method="POST" class="d-flex gap-2">
+                                <input type="hidden" name="action" value="assign">
+                                <input type="hidden" name="page_id" value="{{ page.id }}">
+                                <select name="user_id" class="form-select form-select-sm">
+                                    {% for u in unassigned %}
+                                    <option value="{{ u.id }}">{{ u.username }}</option>
+                                    {% endfor %}
+                                </select>
+                                <button type="submit" class="btn btn-sm btn-primary text-nowrap">
+                                    <i class="bi bi-plus"></i> Thêm
+                                </button>
+                            </form>
+                            {% endif %}
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="text-center py-5 text-muted">
+            <i class="bi bi-inbox display-4 d-block mb-3 opacity-50"></i>
+            <p>Chưa có fanpage. Tạo page đầu tiên bên trái.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Edit page modals -->
+{% for page in pages %}
+<div class="modal fade" id="editModal{{ page.id }}" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h6 class="modal-title fw-bold">Chỉnh sửa — {{ page.name }}</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST">
+                <div class="modal-body">
+                    <input type="hidden" name="action" value="update">
+                    <input type="hidden" name="page_id" value="{{ page.id }}">
+                    <div class="mb-3">
+                        <label class="form-label small">Tên page</label>
+                        <input type="text" name="name" class="form-control" value="{{ page.name }}" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small">Link Facebook</label>
+                        <input type="url" name="fb_url" class="form-control" value="{{ page.fb_url or '' }}">
+                    </div>
+                    <div class="mb-1">
+                        <label class="form-label small">Ghi chú</label>
+                        <input type="text" name="description" class="form-control" value="{{ page.description or '' }}">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Huỷ</button>
+                    <button type="submit" class="btn btn-primary btn-sm">Lưu</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endfor %}
+{% endblock %}

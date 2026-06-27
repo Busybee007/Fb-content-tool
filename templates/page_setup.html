@@ -1,0 +1,205 @@
+{% extends "base.html" %}
+{% block title %}Thiết lập – {{ fanpage.name }} – {{ app_name }}{% endblock %}
+
+{% block extra_head %}
+<style>
+.ratio-slider { width:100%; accent-color:#1877f2; cursor:pointer; }
+.ratio-display { font-weight:600; color:#1877f2; min-width:52px; text-align:right; font-size:.95rem; }
+.ratio-row { margin-bottom:.85rem; }
+.tier-badge { font-size:11px; padding:3px 9px; border-radius:12px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb small">
+        <li class="breadcrumb-item"><a href="{{ url_for('pages_list') }}">Fanpages</a></li>
+        <li class="breadcrumb-item active">{{ fanpage.name }} — Thiết lập</li>
+    </ol>
+</nav>
+
+<div class="page-hero mb-4">
+    <h1 class="h3 fw-bold mb-1"><i class="bi bi-sliders me-2"></i>Thiết lập — {{ fanpage.name }}</h1>
+    <p class="mb-0 opacity-90">{{ product_count }} sản phẩm · Cấu hình tỷ lệ và tạo lịch {{ 7 }}-ngày cho page này.</p>
+</div>
+
+<form method="POST" id="setupForm">
+<input type="hidden" name="week_start" id="weekStartInput" value="{{ current_monday }}">
+
+<div class="row g-4">
+
+    <!-- LEFT: Filters -->
+    <div class="col-lg-3">
+        <div class="card border-0 shadow-sm mb-3">
+            <div class="card-body p-4">
+                <h6 class="fw-bold mb-3"><i class="bi bi-funnel me-2 text-primary"></i>Bộ lọc</h6>
+                <div class="mb-3">
+                    <label class="form-label small text-muted">Giá tối thiểu (VNĐ)</label>
+                    <input type="number" class="form-control" name="min_price" min="0"
+                           value="{{ filter_cfg.min_price | int }}">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small text-muted">Giá tối đa (VNĐ)</label>
+                    <input type="number" class="form-control" name="max_price" min="0"
+                           value="{{ filter_cfg.max_price | int if filter_cfg.max_price < 999999999 else '' }}"
+                           placeholder="Không giới hạn">
+                </div>
+                <div class="mb-1">
+                    <label class="form-label small text-muted">Số SP/ngày</label>
+                    <input type="number" class="form-control" name="per_day"
+                           min="10" max="15" value="{{ per_day }}">
+                    <div class="form-text">10–15 sản phẩm mỗi ngày</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card border-0 shadow-sm mb-3">
+            <div class="card-body p-4">
+                <h6 class="fw-bold mb-2"><i class="bi bi-calendar-week me-2 text-primary"></i>Tuần bắt đầu</h6>
+                <input type="date" class="form-control" id="weekPicker" value="{{ current_monday }}">
+                <div class="form-text">Lịch sẽ chạy 7 ngày từ ngày này.</div>
+            </div>
+        </div>
+
+        <button type="submit" class="btn btn-primary w-100 py-2 fw-semibold">
+            <i class="bi bi-calendar-plus me-2"></i>Tạo lịch tuần
+        </button>
+        <a href="{{ url_for('page_schedule', page_id=fanpage.id) }}"
+           class="btn btn-outline-secondary w-100 mt-2">
+            <i class="bi bi-calendar-week me-1"></i>Xem lịch hiện tại
+        </a>
+    </div>
+
+    <!-- RIGHT: Ratios -->
+    <div class="col-lg-9">
+
+        <!-- Tier 1: Loại hàng -->
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-body p-4">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <div>
+                        <h6 class="fw-bold mb-0">
+                            <span class="badge bg-primary tier-badge me-2">Tầng 1</span>
+                            Tỷ lệ theo loại hàng
+                        </h6>
+                        <small class="text-muted">Phân bổ % theo chiến lược kinh doanh</small>
+                    </div>
+                    <span class="badge fs-6 bg-light text-dark border" id="typeTotalBadge">
+                        Tổng: <span id="typeTotalValue">100.0</span>%
+                    </span>
+                </div>
+                <div id="typeWarning" class="alert alert-danger py-2 small d-none">Tổng phải bằng 100%</div>
+
+                {% set type_items = [
+                    ("mass",     "mass",    "Bán mass",  "bi-lightning-charge", "success"),
+                    ("thanh_ly", "thanh ly","Thanh lý",  "bi-tag",              "warning"),
+                    ("mo_ban",   "mo ban",  "Mở bán",    "bi-star",             "info"),
+                    ("order",    "order",   "Order",     "bi-clock",            "secondary"),
+                ] %}
+                {% for form_key, db_key, label, icon, color in type_items %}
+                {% set val = ratios.type.get(db_key, 25) %}
+                <div class="ratio-row">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <span class="small fw-semibold">
+                            <i class="bi {{ icon }} me-1 text-{{ color }}"></i>{{ label }}
+                        </span>
+                        <span class="ratio-display" id="td_{{ form_key }}">{{ "%.1f"|format(val) }}%</span>
+                    </div>
+                    <input type="range" class="ratio-slider type-slider" min="0" max="100" step="0.5"
+                           value="{{ val }}" data-display="td_{{ form_key }}"
+                           name="type_{{ form_key }}">
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Tier 2: Danh mục -->
+        <div class="card border-0 shadow-sm">
+            <div class="card-body p-4">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <div>
+                        <h6 class="fw-bold mb-0">
+                            <span class="badge bg-success tier-badge me-2">Tầng 2</span>
+                            Tỷ lệ theo danh mục
+                        </h6>
+                        <small class="text-muted">Trong các sản phẩm đã chọn, phân bổ theo danh mục</small>
+                    </div>
+                    <span class="badge fs-6 bg-light text-dark border" id="catTotalBadge">
+                        Tổng: <span id="catTotalValue">100.0</span>%
+                    </span>
+                </div>
+                <div id="catWarning" class="alert alert-danger py-2 small d-none">Tổng phải bằng 100%</div>
+
+                {% if categories %}
+                {% for cat in categories %}
+                {% set val = ratios.category.get(cat, (100 / categories|length)) %}
+                <div class="ratio-row">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <span class="small fw-semibold">
+                            <i class="bi bi-tag me-1 text-primary"></i>{{ cat }}
+                        </span>
+                        <span class="ratio-display" id="cd_{{ loop.index }}">{{ "%.1f"|format(val) }}%</span>
+                    </div>
+                    <input type="range" class="ratio-slider cat-slider" min="0" max="100" step="0.5"
+                           value="{{ val }}" data-display="cd_{{ loop.index }}"
+                           name="ratio_{{ cat }}">
+                </div>
+                {% endfor %}
+                {% else %}
+                <p class="text-muted">Chưa có danh mục. Upload Excel để có dữ liệu.</p>
+                {% endif %}
+            </div>
+        </div>
+
+    </div>
+</div>
+</form>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function updateTotal(sliderClass, displayId, warningId, totalDisplayId) {
+    const sliders = document.querySelectorAll('.' + sliderClass);
+    let total = 0;
+    sliders.forEach(s => {
+        total += parseFloat(s.value);
+        document.getElementById(s.dataset.display).textContent = parseFloat(s.value).toFixed(1) + '%';
+    });
+    document.getElementById(totalDisplayId).textContent = total.toFixed(1);
+    const warn = document.getElementById(warningId);
+    const badge = document.getElementById(displayId);
+    if (Math.abs(total - 100) > 0.5) {
+        warn.classList.remove('d-none');
+        badge.classList.add('bg-danger', 'text-white');
+        badge.classList.remove('bg-light', 'text-dark');
+    } else {
+        warn.classList.add('d-none');
+        badge.classList.remove('bg-danger', 'text-white');
+        badge.classList.add('bg-light', 'text-dark');
+    }
+}
+
+document.querySelectorAll('.type-slider').forEach(s => {
+    s.addEventListener('input', () => updateTotal('type-slider', 'typeTotalBadge', 'typeWarning', 'typeTotalValue'));
+});
+document.querySelectorAll('.cat-slider').forEach(s => {
+    s.addEventListener('input', () => updateTotal('cat-slider', 'catTotalBadge', 'catWarning', 'catTotalValue'));
+});
+
+// Sync date picker → hidden input
+document.getElementById('weekPicker').addEventListener('change', function() {
+    const d = new Date(this.value);
+    // Snap to Monday
+    const day = d.getDay();
+    const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+    d.setDate(diff);
+    const iso = d.toISOString().slice(0, 10);
+    this.value = iso;
+    document.getElementById('weekStartInput').value = iso;
+});
+
+// Initial totals
+updateTotal('type-slider', 'typeTotalBadge', 'typeWarning', 'typeTotalValue');
+updateTotal('cat-slider', 'catTotalBadge', 'catWarning', 'catTotalValue');
+</script>
+{% endblock %}

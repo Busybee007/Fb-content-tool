@@ -1,0 +1,172 @@
+{% extends "base.html" %}
+{% block title %}Lịch tuần – {{ fanpage.name }} – {{ app_name }}{% endblock %}
+
+{% block extra_head %}
+<style>
+.day-col { min-width: 160px; }
+.slot-card { background:#fff; border:1px solid #e9ecef; border-radius:8px; padding:8px 10px;
+             margin-bottom:6px; cursor:pointer; transition:border-color .15s, box-shadow .15s; }
+.slot-card:hover { border-color:#1877f2; box-shadow:0 2px 8px rgba(24,119,242,.15); }
+.slot-card.selected { border-color:#1877f2; background:#e8f0fe; box-shadow:0 0 0 2px #1877f2; }
+.slot-thumb { width:36px; height:36px; object-fit:cover; border-radius:5px; flex-shrink:0; }
+.slot-thumb-ph { width:36px; height:36px; background:#f0f0f0; border-radius:5px;
+                  display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.day-header { background:linear-gradient(135deg,#1877f2,#0d5dbf); color:#fff;
+              border-radius:8px; padding:8px 12px; margin-bottom:10px; text-align:center; }
+.badge-chien-luoc-mass     { background:#0d6efd; }
+.badge-chien-luoc-thanh-ly { background:#dc3545; }
+.badge-chien-luoc-mo-ban   { background:#0dcaf0; color:#000; }
+.badge-chien-luoc-order    { background:#6c757d; }
+</style>
+{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb small">
+        <li class="breadcrumb-item"><a href="{{ url_for('pages_list') }}">Fanpages</a></li>
+        <li class="breadcrumb-item active">{{ fanpage.name }} — Lịch tuần</li>
+    </ol>
+</nav>
+
+<div class="page-hero mb-4 d-flex justify-content-between align-items-start flex-wrap gap-3">
+    <div>
+        <h1 class="h3 fw-bold mb-1"><i class="bi bi-calendar-week me-2"></i>{{ fanpage.name }}</h1>
+        <p class="mb-0 opacity-90">
+            Tuần {{ week_start }} · {{ total_slots }} sản phẩm
+        </p>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+        <a href="{{ url_for('page_setup', page_id=fanpage.id) }}" class="btn btn-light btn-sm fw-semibold">
+            <i class="bi bi-sliders me-1"></i>Thiết lập lại
+        </a>
+        <a href="{{ url_for('page_content', page_id=fanpage.id, week_start=week_start) }}"
+           class="btn btn-light btn-sm fw-semibold">
+            <i class="bi bi-chat-square-text me-1"></i>Content
+        </a>
+    </div>
+</div>
+
+<!-- Week selector -->
+{% if weeks %}
+<div class="d-flex align-items-center gap-2 mb-4 flex-wrap">
+    <span class="small text-muted fw-semibold">Chọn tuần:</span>
+    {% for w in weeks %}
+    <a href="{{ url_for('page_schedule', page_id=fanpage.id, week_start=w) }}"
+       class="btn btn-sm {% if w == week_start %}btn-primary{% else %}btn-outline-secondary{% endif %}">
+        {{ w }}
+    </a>
+    {% endfor %}
+</div>
+{% endif %}
+
+{% if total_slots == 0 %}
+<div class="text-center py-5">
+    <i class="bi bi-calendar-x display-4 d-block mb-3 text-muted opacity-50"></i>
+    <p class="text-muted mb-3">Chưa có lịch cho tuần này.</p>
+    <a href="{{ url_for('page_setup', page_id=fanpage.id) }}" class="btn btn-primary">
+        <i class="bi bi-sliders me-1"></i>Thiết lập và tạo lịch
+    </a>
+</div>
+{% else %}
+
+<!-- Swap form (hidden, submitted by JS) -->
+<form method="POST" action="{{ url_for('schedule_swap', page_id=fanpage.id) }}" id="swapForm">
+    <input type="hidden" name="slot_a" id="swapSlotA">
+    <input type="hidden" name="slot_b" id="swapSlotB">
+    <input type="hidden" name="week_start" value="{{ week_start }}">
+</form>
+
+<!-- Swap bar -->
+<div id="swapBar" class="alert alert-info d-flex align-items-center gap-3 d-none mb-3">
+    <i class="bi bi-arrow-left-right fs-5"></i>
+    <div class="flex-grow-1">
+        <strong>Chọn sản phẩm thứ 2</strong> để hoán đổi với: <span id="swapBarName" class="fw-semibold"></span>
+    </div>
+    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="clearSwap()">Huỷ</button>
+</div>
+
+<!-- 7-day grid -->
+<div class="overflow-auto">
+<div class="d-flex gap-3" style="min-width:max-content;">
+    {% for day in date_labels %}
+    {% set slots = schedule[day.date] %}
+    <div class="day-col" style="width:180px;">
+        <div class="day-header">
+            <div class="fw-bold">{{ day.label }}</div>
+            <div class="small opacity-90">{{ day.display }} · {{ slots|length }} SP</div>
+        </div>
+
+        {% for slot in slots %}
+        <div class="slot-card" id="slot-{{ slot.id }}"
+             onclick="selectSlot({{ slot.id }}, '{{ slot.name[:30]|replace("'","\\'")|safe }}')">
+            <div class="d-flex align-items-center gap-2">
+                {% if slot.link_anh %}
+                <img src="{{ slot.link_anh }}" class="slot-thumb" alt=""
+                     onerror="this.style.display='none'">
+                {% else %}
+                <div class="slot-thumb-ph"><i class="bi bi-image text-muted small"></i></div>
+                {% endif %}
+                <div class="flex-grow-1 overflow-hidden">
+                    <div class="small fw-semibold text-truncate" title="{{ slot.name }}">{{ slot.name[:35] }}</div>
+                    <div class="d-flex align-items-center gap-1 mt-1 flex-wrap">
+                        <span class="badge small px-1
+                            {% if slot.chien_luoc == 'mass' %}badge-chien-luoc-mass
+                            {% elif slot.chien_luoc == 'thanh ly' %}badge-chien-luoc-thanh-ly
+                            {% elif slot.chien_luoc == 'mo ban' %}badge-chien-luoc-mo-ban
+                            {% else %}badge-chien-luoc-order{% endif %}">
+                            {{ slot.chien_luoc }}
+                        </span>
+                        <span class="text-muted" style="font-size:11px;">{{ "{:,.0f}".format(slot.gia_ban) }}đ</span>
+                    </div>
+                    {% if slot.caption %}
+                    <i class="bi bi-check-circle-fill text-success small"></i>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <p class="text-muted small text-center py-3">Không có SP</p>
+        {% endfor %}
+    </div>
+    {% endfor %}
+</div>
+</div>
+
+<p class="text-muted small mt-3">
+    <i class="bi bi-info-circle me-1"></i>
+    Click 1 sản phẩm → click sản phẩm thứ 2 để hoán đổi vị trí giữa 2 ngày bất kỳ.
+</p>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let selectedSlotId = null;
+let selectedSlotName = null;
+
+function selectSlot(slotId, slotName) {
+    if (selectedSlotId === null) {
+        selectedSlotId = slotId;
+        selectedSlotName = slotName;
+        document.getElementById('slot-' + slotId).classList.add('selected');
+        document.getElementById('swapBar').classList.remove('d-none');
+        document.getElementById('swapBarName').textContent = slotName;
+    } else if (selectedSlotId === slotId) {
+        clearSwap();
+    } else {
+        document.getElementById('swapSlotA').value = selectedSlotId;
+        document.getElementById('swapSlotB').value = slotId;
+        document.getElementById('swapForm').submit();
+    }
+}
+
+function clearSwap() {
+    if (selectedSlotId) {
+        document.getElementById('slot-' + selectedSlotId).classList.remove('selected');
+    }
+    selectedSlotId = null;
+    selectedSlotName = null;
+    document.getElementById('swapBar').classList.add('d-none');
+}
+</script>
+{% endblock %}

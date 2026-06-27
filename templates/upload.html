@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% block title %}Upload Excel – {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="page-hero mb-4">
+  <h1 class="h3 fw-bold mb-1"><i class="bi bi-file-earmark-arrow-up me-2"></i>Upload Excel</h1>
+  <p class="mb-0 opacity-90">Import sản phẩm từ file chuẩn — tối đa 50MB.</p>
+</div>
+
+<div class="row g-4">
+  <div class="col-lg-5">
+
+    <div class="card border-0 shadow-sm">
+      <div class="card-body p-4">
+        <form method="POST" enctype="multipart/form-data">
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Chọn file Excel (.xlsx)</label>
+            <input type="file" class="form-control" name="excel_file" accept=".xlsx,.xlsm" required>
+            <div class="form-text">Dung lượng tối đa: 50MB</div>
+          </div>
+          <button type="submit" class="btn btn-primary w-100">
+            <i class="bi bi-upload me-2"></i>Upload & Import
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <div class="card border-0 shadow-sm mt-4">
+      <div class="card-body p-4">
+        <h6 class="fw-bold mb-3">Cột bắt buộc trong file chuẩn</h6>
+        <ul class="small text-muted mb-0 ps-3">
+          <li><strong>ma_vach</strong> — mã vạch từ Nhanh.vn</li>
+          <li><strong>ten_san_pham</strong> — tên sản phẩm</li>
+          <li><strong>danh_muc</strong> — danh mục chính</li>
+          <li><strong>gia_ban</strong> — giá bán (số, không có đ)</li>
+          <li><strong>link_anh</strong> — URL ảnh sản phẩm</li>
+          <li><strong>tinh_trang_kho</strong> — sẵn / order</li>
+          <li><strong>chien_luoc</strong> — mass / thanh lý / mở bán</li>
+          <li><strong>uu_tien</strong> — 1, 2 hoặc 3</li>
+        </ul>
+        <div class="mt-3">
+          <small class="text-muted">Dòng 1: tiêu đề · Dòng 2: ghi chú (bỏ qua) · Dòng 3+: dữ liệu</small>
+        </div>
+      </div>
+    </div>
+
+    {% if total > 0 %}
+    <div class="card border-0 shadow-sm mt-4 border-success">
+      <div class="card-body p-4">
+        <h6 class="fw-bold text-success mb-2">
+          <i class="bi bi-database me-2"></i>Dữ liệu hiện tại
+        </h6>
+        <p class="mb-0">{{ total }} sản phẩm · {{ category_count }} danh mục</p>
+      </div>
+    </div>
+    {% endif %}
+
+  </div>
+
+  <div class="col-lg-7">
+    <div class="card border-0 shadow-sm">
+      <div class="card-header bg-white border-0 pt-4 px-4">
+        <h5 class="fw-bold mb-0">
+          <i class="bi bi-eye me-2 text-primary"></i>Preview — 10 sản phẩm đầu
+        </h5>
+      </div>
+      <div class="card-body p-4 pt-2">
+        {% if preview %}
+        <div class="table-responsive">
+          <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+              <tr>
+                <th>#</th>
+                <th>Ảnh</th>
+                <th>Tên sản phẩm</th>
+                <th>Giá</th>
+                <th>Danh mục</th>
+                <th>Loại</th>
+                <th>Chiến lược</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for p in preview %}
+              <tr>
+                <td>{{ loop.index }}</td>
+                <td>
+                  {% if p.link_anh %}
+                  <img src="{{ p.link_anh }}" style="width:44px;height:44px;object-fit:cover;border-radius:6px;"
+                       alt="" onerror="this.style.display='none'">
+                  {% else %}
+                  <div style="width:44px;height:44px;background:#f0f0f0;border-radius:6px;display:flex;align-items:center;justify-content:center;">
+                    <i class="bi bi-image text-muted"></i>
+                  </div>
+                  {% endif %}
+                </td>
+                <td class="fw-semibold">{{ p.name[:55] }}{% if p.name|length > 55 %}…{% endif %}</td>
+                <td class="text-nowrap">{{ "{:,.0f}".format(p.gia_ban) }}đ</td>
+                <td><span class="badge bg-light text-dark border">{{ p.danh_muc }}</span></td>
+                <td>
+                  {% if p.tinh_trang_kho == "sẵn" %}
+                  <span class="badge bg-success">Sẵn</span>
+                  {% else %}
+                  <span class="badge bg-warning text-dark">Order</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if p.chien_luoc == "mass" %}
+                  <span class="badge bg-primary">Mass</span>
+                  {% elif p.chien_luoc == "thanh lý" %}
+                  <span class="badge bg-danger">Thanh lý</span>
+                  {% else %}
+                  <span class="badge bg-info text-dark">Mở bán</span>
+                  {% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% if total > 10 %}
+        <p class="text-muted small mt-3 mb-0">... và {{ total - 10 }} sản phẩm khác.</p>
+        {% endif %}
+        <div class="mt-3">
+          <a href="{{ url_for('pages_list') }}" class="btn btn-outline-primary">
+            Về danh sách page <i class="bi bi-arrow-right ms-1"></i>
+          </a>
+        </div>
+        {% else %}
+        <div class="text-center text-muted py-5">
+          <i class="bi bi-inbox display-4 d-block mb-3 opacity-50"></i>
+          <p class="mb-0">Chưa có dữ liệu. Upload file Excel để xem preview.</p>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

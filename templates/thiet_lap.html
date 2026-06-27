@@ -1,0 +1,261 @@
+{% extends "base.html" %}
+{% block title %}Thiết lập – {{ app_name }}{% endblock %}
+
+{% block extra_head %}
+<style>
+.ratio-row { margin-bottom: 1rem; }
+.ratio-slider { width: 100%; accent-color: #1565C0; cursor: pointer; }
+.ratio-display { font-weight: 500; color: #1565C0; min-width: 48px; text-align: right; }
+.ratio-drag-tooltip {
+  position: fixed; z-index: 9999; pointer-events: none;
+  background: #1565C0; color: #fff; font-size: 13px;
+  padding: 5px 10px; border-radius: 6px;
+  white-space: nowrap; opacity: 0; transition: opacity .1s;
+  transform: translate(-50%, -130%);
+}
+.ratio-drag-tooltip.visible { opacity: 1; }
+.ratio-drag-tooltip .tooltip-total { opacity: .75; }
+.section-badge { font-size: 12px; padding: 3px 10px; border-radius: 12px; }
+.tiers-divider { border-left: 3px solid #e0e0e0; padding-left: 1rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-hero mb-4">
+  <h1 class="h3 fw-bold mb-1"><i class="bi bi-sliders me-2"></i>Thiết lập tỷ lệ</h1>
+  <p class="mb-0 opacity-90">{{ product_count }} sản phẩm — phân bổ vào {{ num_pages }} page (15–20 SP/page).</p>
+</div>
+
+<form method="POST" id="ratioForm">
+<div class="row g-4">
+
+  <!-- CỘT TRÁI: Bộ lọc giá -->
+  <div class="col-lg-3">
+    <div class="card border-0 shadow-sm mb-4">
+      <div class="card-body p-4">
+        <h6 class="fw-bold mb-3"><i class="bi bi-funnel me-2 text-primary"></i>Bộ lọc giá</h6>
+        <div class="mb-3">
+          <label class="form-label small text-muted">Giá tối thiểu (VNĐ)</label>
+          <input type="number" class="form-control" name="min_price" min="0"
+                 value="{{ filter_config.min_price | int }}">
+        </div>
+        <div class="mb-3">
+          <label class="form-label small text-muted">Giá tối đa (VNĐ)</label>
+          <input type="number" class="form-control" name="max_price" min="0"
+                 value="{{ filter_config.max_price | int if filter_config.max_price < 999999999 else '' }}"
+                 placeholder="Không giới hạn">
+        </div>
+      </div>
+    </div>
+
+    <button type="submit" class="btn btn-primary w-100 py-2 fw-semibold">
+      <i class="bi bi-shuffle me-2"></i>Phân bổ sản phẩm
+    </button>
+  </div>
+
+  <!-- CỘT PHẢI: 2 tầng tỷ lệ -->
+  <div class="col-lg-9">
+
+    <!-- TẦNG 1: Theo loại hàng -->
+    <div class="card border-0 shadow-sm mb-4">
+      <div class="card-body p-4">
+        <div class="d-flex align-items-center justify-content-between mb-3">
+          <div>
+            <h6 class="fw-bold mb-0">
+              <span class="badge bg-primary me-2">Tầng 1</span>
+              Tỷ lệ theo loại hàng
+            </h6>
+            <small class="text-muted">Phân bổ % tổng sản phẩm theo chiến lược kinh doanh</small>
+          </div>
+          <span class="badge fs-6" id="typeTotalBadge">Tổng: <span id="typeTotalValue">100.0</span>%</span>
+        </div>
+
+        <div id="typeWarning" class="alert alert-danger py-2 d-none">
+          Tổng tỷ lệ loại hàng phải bằng 100%.
+        </div>
+
+        {% set type_items = [
+          ("mass",      "Bán mass",  "bi-lightning-charge", "success"),
+          ("thanh lý",  "Thanh lý",  "bi-tag",              "warning"),
+          ("mở bán",    "Mở bán",    "bi-star",             "info"),
+          ("order",     "Order",     "bi-clock",            "secondary"),
+        ] %}
+
+        {% for key, label, icon, color in type_items %}
+        {% set form_key = "type_" + key.replace(" ", "_") %}
+        {% set current_val = type_ratios.get(key, 25) %}
+        <div class="ratio-row">
+          <div class="d-flex align-items-center justify-content-between mb-1">
+            <span class="small fw-semibold">
+              <i class="bi {{ icon }} me-1 text-{{ color }}"></i>{{ label }}
+            </span>
+            <span class="ratio-display" id="typeDisplay_{{ loop.index }}">{{ "%.1f"|format(current_val) }}%</span>
+          </div>
+          <input type="range" class="ratio-slider type-slider"
+                 min="0" max="100" step="0.5"
+                 value="{{ current_val }}"
+                 data-category="{{ label }}"
+                 data-group="type"
+                 id="typeSlider_{{ loop.index }}"
+                 data-display="typeDisplay_{{ loop.index }}">
+          <input type="hidden" name="{{ form_key }}"
+                 class="type-hidden"
+                 value="{{ "%.1f"|format(current_val) }}">
+        </div>
+        {% endfor %}
+
+      </div>
+    </div>
+
+    <!-- TẦNG 2: Theo danh mục -->
+    <div class="card border-0 shadow-sm">
+      <div class="card-body p-4">
+        <div class="d-flex align-items-center justify-content-between mb-3">
+          <div>
+            <h6 class="fw-bold mb-0">
+              <span class="badge bg-secondary me-2">Tầng 2</span>
+              Tỷ lệ theo danh mục
+            </h6>
+            <small class="text-muted">Trong mỗi loại hàng, phân bổ theo danh mục sản phẩm</small>
+          </div>
+          <span class="badge fs-6 bg-success" id="catTotalBadge">Tổng: <span id="catTotalValue">100.0</span>%</span>
+        </div>
+
+        <div id="catWarning" class="alert alert-danger py-2 d-none">
+          Tổng tỷ lệ danh mục phải bằng 100%.
+        </div>
+
+        {% for cat in categories %}
+        {% set current_val = category_ratios.get(cat, 0) %}
+        <div class="ratio-row">
+          <div class="d-flex align-items-center justify-content-between mb-1">
+            <span class="small fw-semibold">{{ cat }}</span>
+            <span class="ratio-display" id="catDisplay_{{ loop.index }}">{{ "%.1f"|format(current_val) }}%</span>
+          </div>
+          <input type="range" class="ratio-slider cat-slider"
+                 min="0" max="100" step="0.5"
+                 value="{{ current_val }}"
+                 data-category="{{ cat }}"
+                 data-group="cat"
+                 id="catSlider_{{ loop.index }}"
+                 data-display="catDisplay_{{ loop.index }}">
+          <input type="hidden" name="ratio_{{ cat }}"
+                 class="cat-hidden"
+                 value="{{ "%.1f"|format(current_val) }}">
+        </div>
+        {% endfor %}
+
+      </div>
+    </div>
+
+  </div><!-- /col -->
+</div><!-- /row -->
+</form>
+
+<div id="ratioDragTooltip" class="ratio-drag-tooltip" aria-hidden="true"></div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  function makeSliderGroup(sliderClass, hiddenClass, totalBadgeId, totalValueId, warningId) {
+    const sliders = Array.from(document.querySelectorAll("." + sliderClass));
+    const totalBadge = document.getElementById(totalBadgeId);
+    const totalValue = document.getElementById(totalValueId);
+    const warning = document.getElementById(warningId);
+
+    function calcTotal() {
+      return sliders.reduce((s, el) => s + parseFloat(el.value), 0);
+    }
+    function sumExcept(exc) {
+      return sliders.reduce((s, el) => el === exc ? s : s + parseFloat(el.value), 0);
+    }
+    function clamp(slider) {
+      const max = Math.max(0, 100 - sumExcept(slider));
+      if (parseFloat(slider.value) > max) slider.value = max;
+    }
+    function update() {
+      sliders.forEach(sl => {
+        const val = parseFloat(sl.value);
+        document.getElementById(sl.dataset.display).textContent = val.toFixed(1) + "%";
+        sl.closest(".ratio-row").querySelector("." + hiddenClass).value = val.toFixed(1);
+      });
+      const total = calcTotal();
+      totalValue.textContent = total.toFixed(1);
+      const ok = Math.abs(total - 100) <= 0.5;
+      totalBadge.className = "badge fs-6 " + (ok ? "bg-success" : "bg-danger");
+      warning.classList.toggle("d-none", ok);
+      return ok;
+    }
+    return { sliders, clamp, update };
+  }
+
+  const typeGroup = makeSliderGroup("type-slider", "type-hidden", "typeTotalBadge", "typeTotalValue", "typeWarning");
+  const catGroup  = makeSliderGroup("cat-slider",  "cat-hidden",  "catTotalBadge",  "catTotalValue",  "catWarning");
+
+  const tooltip = document.getElementById("ratioDragTooltip");
+  let activeSlider = null;
+  let lastPos = { x: 0, y: 0 };
+
+  function showTooltip(slider, x, y, total) {
+    tooltip.innerHTML = (slider.dataset.category || "") + ": " +
+      parseFloat(slider.value).toFixed(1) + "%" +
+      ' <span class="tooltip-total">| Tổng: ' + total.toFixed(1) + "%</span>";
+    tooltip.style.left = x + "px";
+    tooltip.style.top  = y + "px";
+    tooltip.classList.add("visible");
+  }
+  function hideTooltip() { tooltip.classList.remove("visible"); activeSlider = null; }
+
+  function bindGroup(group) {
+    group.sliders.forEach(slider => {
+      slider.addEventListener("pointerdown", e => {
+        activeSlider = slider;
+        lastPos = { x: e.clientX, y: e.clientY };
+        slider.setPointerCapture(e.pointerId);
+        group.clamp(slider);
+        group.update();
+        showTooltip(slider, e.clientX, e.clientY, parseFloat(document.getElementById(
+          slider.dataset.group === "type" ? "typeTotalValue" : "catTotalValue"
+        ).textContent));
+      });
+      slider.addEventListener("input", () => {
+        group.clamp(slider);
+        const ok = group.update();
+        if (activeSlider === slider) {
+          showTooltip(slider, lastPos.x, lastPos.y, parseFloat(document.getElementById(
+            slider.dataset.group === "type" ? "typeTotalValue" : "catTotalValue"
+          ).textContent));
+        }
+      });
+      slider.addEventListener("pointermove", e => {
+        if (activeSlider !== slider) return;
+        lastPos = { x: e.clientX, y: e.clientY };
+        group.clamp(slider);
+        group.update();
+        showTooltip(slider, e.clientX, e.clientY, parseFloat(document.getElementById(
+          slider.dataset.group === "type" ? "typeTotalValue" : "catTotalValue"
+        ).textContent));
+      });
+      slider.addEventListener("pointerup", hideTooltip);
+      slider.addEventListener("pointercancel", hideTooltip);
+    });
+  }
+
+  bindGroup(typeGroup);
+  bindGroup(catGroup);
+  document.addEventListener("pointerup", hideTooltip);
+
+  document.getElementById("ratioForm").addEventListener("submit", e => {
+    typeGroup.sliders.forEach(s => typeGroup.clamp(s));
+    catGroup.sliders.forEach(s => catGroup.clamp(s));
+    const typeOk = typeGroup.update();
+    const catOk  = catGroup.update();
+    if (!typeOk || !catOk) e.preventDefault();
+  });
+
+  typeGroup.update();
+  catGroup.update();
+})();
+</script>
+{% endblock %}

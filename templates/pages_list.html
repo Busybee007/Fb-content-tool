@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Fanpages – {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="page-hero mb-4 d-flex justify-content-between align-items-center">
+    <div>
+        <h1 class="h3 fw-bold mb-1"><i class="bi bi-grid-3x3-gap me-2"></i>Fanpages của bạn</h1>
+        <p class="mb-0 opacity-90">{{ pages|length }} page — chọn để thiết lập và lên lịch nội dung.</p>
+    </div>
+    {% if current_user.role == 'admin' %}
+    <a href="{{ url_for('admin_pages') }}" class="btn btn-light fw-semibold">
+        <i class="bi bi-plus-lg me-1"></i>Quản lý page
+    </a>
+    {% endif %}
+</div>
+
+{% if pages %}
+<div class="row g-3">
+    {% for page in pages %}
+    <div class="col-sm-6 col-lg-4">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body p-4">
+                <div class="d-flex align-items-start gap-3 mb-3">
+                    <div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,#1877f2,#0d5dbf);
+                                display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                        <i class="bi bi-facebook text-white fs-5"></i>
+                    </div>
+                    <div class="flex-grow-1 overflow-hidden">
+                        <h5 class="fw-bold mb-0 text-truncate">{{ page.name }}</h5>
+                        {% if page.description %}
+                        <p class="text-muted small mb-0 text-truncate">{{ page.description }}</p>
+                        {% endif %}
+                        {% if page.fb_url %}
+                        <a href="{{ page.fb_url }}" target="_blank" class="small text-primary text-truncate d-block">
+                            <i class="bi bi-link-45deg"></i> Xem page
+                        </a>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="d-flex gap-2">
+                    <a href="{{ url_for('page_setup', page_id=page.id) }}"
+                       class="btn btn-outline-primary btn-sm flex-grow-1">
+                        <i class="bi bi-sliders me-1"></i>Thiết lập
+                    </a>
+                    <a href="{{ url_for('page_schedule', page_id=page.id) }}"
+                       class="btn btn-primary btn-sm flex-grow-1">
+                        <i class="bi bi-calendar-week me-1"></i>Lịch tuần
+                    </a>
+                </div>
+                <a href="{{ url_for('page_content', page_id=page.id) }}"
+                   class="btn btn-outline-secondary btn-sm w-100 mt-2">
+                    <i class="bi bi-chat-square-text me-1"></i>Content / Caption
+                </a>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="text-center py-5">
+    <i class="bi bi-inbox display-4 d-block mb-3 text-muted opacity-50"></i>
+    <p class="text-muted mb-0">
+        {% if current_user.role == 'admin' %}
+        Chưa có fanpage nào. <a href="{{ url_for('admin_pages') }}">Tạo fanpage</a> để bắt đầu.
+        {% else %}
+        Bạn chưa được phân quyền quản lý fanpage nào. Liên hệ admin.
+        {% endif %}
+    </p>
+</div>
+{% endif %}
+{% endblock %}

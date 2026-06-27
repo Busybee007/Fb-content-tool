@@ -1,0 +1,100 @@
+:root {
+    --primary: #1877f2;
+    --primary-gradient: linear-gradient(135deg, #1877f2 0%, #0d5dbf 100%);
+    --surface: #f0f2f5;
+}
+
+body {
+    background-color: var(--surface);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+main {
+    flex: 1;
+}
+
+.app-navbar {
+    background: var(--primary-gradient);
+}
+
+.page-hero {
+    background: var(--primary-gradient);
+    color: #fff;
+    border-radius: 1rem;
+    padding: 1.75rem 2rem;
+    box-shadow: 0 4px 20px rgba(24, 119, 242, 0.25);
+}
+
+.card-soft {
+    border: none;
+    border-radius: 1rem;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+}
+
+.product-thumb {
+    width: 48px;
+    height: 48px;
+    object-fit: cover;
+    border-radius: 0.5rem;
+    background: #e9ecef;
+    flex-shrink: 0;
+}
+
+.product-thumb-lg {
+    max-height: 280px;
+    object-fit: contain;
+    border-radius: 0.75rem;
+    background: #f8f9fa;
+}
+
+.product-list {
+    max-height: 70vh;
+    overflow-y: auto;
+}
+
+.caption-editor {
+    min-height: 200px;
+    resize: vertical;
+}
+
+.nav-pills .nav-link.active {
+    background: var(--primary);
+}
+
+.form-range::-webkit-slider-thumb {
+    background: var(--primary);
+}
+
+.form-range::-moz-range-thumb {
+    background: var(--primary);
+}
+
+.ratio-drag-tooltip {
+    position: fixed;
+    pointer-events: none;
+    z-index: 9999;
+    background: rgba(33, 37, 41, 0.92);
+    color: #fff;
+    padding: 0.45rem 0.75rem;
+    border-radius: 0.5rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    white-space: nowrap;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+    transform: translate(14px, -12px);
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.1s ease;
+}
+
+.ratio-drag-tooltip.visible {
+    opacity: 1;
+    visibility: visible;
+}
+
+.ratio-drag-tooltip .tooltip-total {
+    font-weight: 400;
+    opacity: 0.85;
+}

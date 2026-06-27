@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% block title %}Duyệt sản phẩm – {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="page-hero mb-4">
+  <h1 class="h3 fw-bold mb-1"><i class="bi bi-grid me-2"></i>Duyệt sản phẩm</h1>
+  <p class="mb-0 opacity-90">{{ num_pages }} page Facebook — hoán đổi sản phẩm giữa các vị trí.</p>
+</div>
+
+<ul class="nav nav-pills flex-wrap gap-2 mb-4" role="tablist">
+  {% for page_num, items in pages.items() %}
+  <li class="nav-item">
+    <button class="nav-link {% if loop.first %}active{% endif %}"
+            data-bs-toggle="pill" data-bs-target="#page-{{ page_num }}" type="button">
+      Page {{ page_num }} <span class="small opacity-75">({{ items|length }})</span>
+    </button>
+  </li>
+  {% endfor %}
+</ul>
+
+<div class="tab-content">
+  {% for page_num, items in pages.items() %}
+  <div class="tab-pane fade {% if loop.first %}show active{% endif %}" id="page-{{ page_num }}">
+    <div class="card border-0 shadow-sm">
+      <div class="card-body p-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h5 class="fw-bold mb-0">Page {{ page_num }} — {{ items|length }} sản phẩm</h5>
+          <a href="{{ url_for('content') }}" class="btn btn-sm btn-outline-primary">Sang Content</a>
+        </div>
+
+        {% if items %}
+        <div class="table-responsive">
+          <table class="table align-middle">
+            <thead class="table-light">
+              <tr>
+                <th>#</th>
+                <th>Ảnh</th>
+                <th>Tên sản phẩm</th>
+                <th>Giá</th>
+                <th>Danh mục</th>
+                <th>Loại</th>
+                <th>Hoán đổi</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for product in items %}
+              <tr>
+                <td>{{ loop.index }}</td>
+                <td>
+                  {% if product.link_anh %}
+                  <img src="{{ product.link_anh }}"
+                       style="width:44px;height:44px;object-fit:cover;border-radius:6px;"
+                       alt="" onerror="this.style.display='none'">
+                  {% else %}
+                  <div style="width:44px;height:44px;background:#f0f0f0;border-radius:6px;
+                              display:flex;align-items:center;justify-content:center;">
+                    <i class="bi bi-image text-muted"></i>
+                  </div>
+                  {% endif %}
+                </td>
+                <td class="fw-semibold">{{ product.name[:50] }}</td>
+                <td class="text-nowrap">{{ "{:,.0f}".format(product.gia_ban) }}đ</td>
+                <td><span class="badge bg-light text-dark border">{{ product.danh_muc }}</span></td>
+                <td>
+                  {% if product.tinh_trang_kho == "sẵn" %}
+                  <span class="badge bg-success">Sẵn</span>
+                  {% else %}
+                  <span class="badge bg-warning text-dark">Order</span>
+                  {% endif %}
+                  {% if product.chien_luoc == "mass" %}
+                  <span class="badge bg-primary ms-1">Mass</span>
+                  {% elif product.chien_luoc == "thanh lý" %}
+                  <span class="badge bg-danger ms-1">Thanh lý</span>
+                  {% else %}
+                  <span class="badge bg-info text-dark ms-1">Mở bán</span>
+                  {% endif %}
+                </td>
+                <td>
+                  <form method="POST" action="{{ url_for('duyet_swap') }}" class="d-flex gap-2">
+                    <input type="hidden" name="product_a" value="{{ product.id }}">
+                    <input type="hidden" name="page" value="{{ page_num }}">
+                    <select class="form-select form-select-sm" name="product_b" required>
+                      <option value="">Chọn SP...</option>
+                      {% for other_page, other_items in pages.items() %}
+                      {% for other in other_items %}
+                      {% if other.id != product.id %}
+                      <option value="{{ other.id }}">
+                        P{{ other_page }} – {{ other.name[:35] }}
+                      </option>
+                      {% endif %}
+                      {% endfor %}
+                      {% endfor %}
+                    </select>
+                    <button type="submit" class="btn btn-sm btn-outline-secondary" title="Swap">
+                      <i class="bi bi-arrow-left-right"></i>
+                    </button>
+                  </form>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <div class="text-center text-muted py-5">
+          <i class="bi bi-inbox display-5 d-block mb-2"></i>
+          Page này chưa có sản phẩm.
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  const hash = window.location.hash;
+  if (hash && hash.startsWith("#page-")) {
+    const tab = document.querySelector(`[data-bs-target="${hash}"]`);
+    if (tab) new bootstrap.Tab(tab).show();
+  }
+</script>
+{% endblock %}

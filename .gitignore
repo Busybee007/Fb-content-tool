@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+data/
+uploads/*
+!uploads/.gitkeep
+static/media/*
+!static/media/.gitkeep
+*.db
+.env
+.claude/

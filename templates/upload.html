@@ -18,9 +18,14 @@
             <input type="file" class="form-control" name="excel_file" accept=".xlsx,.xlsm" required>
             <div class="form-text">Dung lượng tối đa: 50MB</div>
           </div>
-          <button type="submit" class="btn btn-primary w-100">
-            <i class="bi bi-upload me-2"></i>Upload & Import
-          </button>
+          <div class="d-flex gap-2 mt-1">
+            <button type="submit" class="btn btn-primary flex-fill">
+              <i class="bi bi-upload me-2"></i>Upload & Import
+            </button>
+            <a href="{{ url_for('download_template') }}" class="btn btn-outline-success">
+              <i class="bi bi-download me-1"></i>Tải file mẫu
+            </a>
+          </div>
         </form>
       </div>
     </div>

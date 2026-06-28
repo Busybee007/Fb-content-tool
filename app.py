@@ -1,3 +1,4 @@
+import io
 import os
 from datetime import date, timedelta
 from uuid import uuid4
@@ -9,6 +10,7 @@ from flask import (
     redirect,
     render_template,
     request,
+    send_file,
     url_for,
 )
 from flask_login import current_user, login_required, login_user, logout_user
@@ -127,6 +129,107 @@ def upload():
                            category_count=len(categories))
 
 
+# ── Template download ─────────────────────────────────────────────────────────
+
+@app.route("/download-template")
+@login_required
+def download_template():
+    import openpyxl
+    from openpyxl.styles import Alignment, Font, PatternFill
+
+    wb = openpyxl.Workbook()
+
+    # ── Sheet 1: Products ──────────────────────────────────────────────────────
+    ws = wb.active
+    ws.title = "Products"
+
+    headers = ["ma_vach", "ten_san_pham", "danh_muc", "gia_ban",
+               "link_anh", "tinh_trang_kho", "chien_luoc", "uu_tien"]
+
+    blue_fill = PatternFill(start_color="1877F2", end_color="1877F2", fill_type="solid")
+    white_bold = Font(color="FFFFFF", bold=True)
+    note_fill = PatternFill(start_color="FFF3CD", end_color="FFF3CD", fill_type="solid")
+    note_font = Font(italic=True, color="856404")
+
+    for col, h in enumerate(headers, 1):
+        c = ws.cell(row=1, column=col, value=h)
+        c.fill = blue_fill
+        c.font = white_bold
+        c.alignment = Alignment(horizontal="center")
+
+    notes = [
+        "Mã vạch duy nhất (từ Nhanh.vn)",
+        "Tên sản phẩm đầy đủ",
+        "Danh mục (VD: Áo, Quần, Váy...)",
+        "Giá bán — chỉ nhập số",
+        "URL ảnh sản phẩm",
+        "sẵn hoặc order",
+        "mass / thanh lý / mở bán",
+        "1 (cao) / 2 (tb) / 3 (thấp)",
+    ]
+    for col, note in enumerate(notes, 1):
+        c = ws.cell(row=2, column=col, value=note)
+        c.fill = note_fill
+        c.font = note_font
+
+    samples = [
+        ("SP001", "Áo thun nam basic trắng size L",    "Áo",   150000, "https://example.com/ao1.jpg",   "sẵn",   "mass",     1),
+        ("SP002", "Quần jean nữ slim fit xanh size M",  "Quần", 280000, "https://example.com/quan1.jpg", "sẵn",   "mass",     2),
+        ("SP003", "Váy hoa mùa hè size M",              "Váy",  320000, "https://example.com/vay1.jpg",  "sẵn",   "mở bán",   1),
+        ("SP004", "Áo khoác dù nam màu đen size L",     "Áo",   450000, "https://example.com/ao2.jpg",   "order", "order",    2),
+        ("SP005", "Quần short nữ kaki size S",           "Quần", 120000, "https://example.com/quan2.jpg", "sẵn",   "thanh lý", 3),
+        ("SP006", "Áo sơ mi nữ trắng công sở size M",   "Áo",   200000, "https://example.com/ao3.jpg",   "sẵn",   "mass",     2),
+        ("SP007", "Đầm dự tiệc đỏ size M",              "Váy",  550000, "https://example.com/dam1.jpg",  "order", "mở bán",   1),
+        ("SP008", "Quần tây nam đen slim size L",        "Quần", 380000, "https://example.com/quan3.jpg", "sẵn",   "thanh lý", 3),
+    ]
+    for row_idx, row in enumerate(samples, 3):
+        for col, val in enumerate(row, 1):
+            ws.cell(row=row_idx, column=col, value=val)
+
+    for col, width in enumerate([15, 42, 16, 14, 38, 18, 14, 10], 1):
+        ws.column_dimensions[ws.cell(row=1, column=col).column_letter].width = width
+
+    # ── Sheet 2: Hướng dẫn ────────────────────────────────────────────────────
+    ws2 = wb.create_sheet("Hướng dẫn")
+
+    guide = [
+        ("Cột",            "Mô tả",                          "Giá trị hợp lệ",                                                    "Ví dụ"),
+        ("ma_vach",        "Mã vạch từ Nhanh.vn",            "Chuỗi ký tự duy nhất, không trùng",                                 "SP001"),
+        ("ten_san_pham",   "Tên đầy đủ của sản phẩm",        "Chuỗi ký tự bất kỳ",                                               "Áo thun nam basic"),
+        ("danh_muc",       "Danh mục sản phẩm",              "Tự định nghĩa (VD: Áo, Quần, Váy, Phụ kiện...)",                   "Áo"),
+        ("gia_ban",        "Giá bán lẻ (VNĐ)",               "Số nguyên dương, không có ký tự đặc biệt",                          "150000"),
+        ("link_anh",       "URL ảnh sản phẩm",               "URL hợp lệ bắt đầu bằng https://",                                 "https://cdn.example.com/img.jpg"),
+        ("tinh_trang_kho", "Tình trạng tồn kho",             "sẵn — có hàng giao ngay\norder — phải đặt hàng trước",             "sẵn"),
+        ("chien_luoc",     "Chiến lược bán hàng",            "mass — bán đại trà\nthanh lý — cần giải phóng hàng\nmở bán — hàng mới ra mắt", "mass"),
+        ("uu_tien",        "Mức độ ưu tiên hiển thị",        "1 — ưu tiên cao nhất\n2 — ưu tiên trung bình\n3 — ưu tiên thấp",  "2"),
+    ]
+
+    for row_idx, row in enumerate(guide, 1):
+        for col, val in enumerate(row, 1):
+            c = ws2.cell(row=row_idx, column=col, value=val)
+            c.alignment = Alignment(wrap_text=True, vertical="top")
+            if row_idx == 1:
+                c.fill = blue_fill
+                c.font = white_bold
+                c.alignment = Alignment(horizontal="center", wrap_text=True)
+
+    for col, width in enumerate([20, 32, 52, 35], 1):
+        ws2.column_dimensions[ws2.cell(row=1, column=col).column_letter].width = width
+    ws2.row_dimensions[1].height = 22
+    for r in range(2, len(guide) + 1):
+        ws2.row_dimensions[r].height = 50
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return send_file(
+        buf,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        as_attachment=True,
+        download_name="bang_san_pham_mau.xlsx",
+    )
+
+
 # ── Pages list ────────────────────────────────────────────────────────────────
 
 @app.route("/pages")
@@ -167,6 +270,7 @@ def page_setup(page_id):
         min_price = float(request.form.get("min_price") or 0)
         max_price = float(request.form.get("max_price") or 999_999_999)
         per_day_val = int(request.form.get("per_day") or DEFAULT_PER_DAY)
+        allow_repeat = request.form.get("allow_repeat") == "on"
         week_start_str = request.form.get("week_start") or _current_monday()
 
         if min_price > max_price:
@@ -203,7 +307,7 @@ def page_setup(page_id):
         # Generate 7-day schedule
         start = date.fromisoformat(week_start_str)
         slots = allocate_page_week(products, new_type, new_cat, min_price, max_price,
-                                   start, per_day_val)
+                                   start, per_day_val, allow_repeat=allow_repeat)
         db.clear_schedule(page_id, week_start_str)
         db.create_schedule(page_id, slots)
 

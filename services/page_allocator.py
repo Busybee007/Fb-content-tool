@@ -47,12 +47,13 @@ def _select_by_ratios(pool_by_key, ratios, total_slots):
 
 
 def allocate_page_week(products, type_ratios, category_ratios, min_price, max_price,
-                       start_date: date, per_day=DEFAULT_PER_DAY):
+                       start_date: date, per_day=DEFAULT_PER_DAY, allow_repeat=False):
     """
     Allocate products for one fanpage across 7 days.
 
     Returns list of {product_id, slot_date (str), slot_order}.
-    Products are de-duplicated within the week.
+    When allow_repeat=False products are de-duplicated within the week.
+    When allow_repeat=True the pool is cycled to fill all slots.
     """
     per_day = max(MIN_PER_DAY, min(MAX_PER_DAY, per_day))
     total_slots = DAYS * per_day
@@ -81,6 +82,10 @@ def allocate_page_week(products, type_ratios, category_ratios, min_price, max_pr
         by_cat[p.get("danh_muc") or "Khác"].append(p)
 
     final = _select_by_ratios(by_cat, category_ratios, len(selected_by_type))
+
+    if allow_repeat and final and len(final) < total_slots:
+        pool = final[:]
+        final = [pool[i % len(pool)] for i in range(total_slots)]
 
     # Distribute across 7 days
     slots = []

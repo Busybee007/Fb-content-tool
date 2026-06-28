@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+{% block title %}Hướng dẫn – {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="page-hero mb-4">
+  <h1 class="h3 fw-bold mb-1"><i class="bi bi-question-circle me-2"></i>Hướng dẫn sử dụng</h1>
+  <p class="mb-0 opacity-90">Các bước cơ bản để làm việc với {{ app_name }}</p>
+</div>
+
+<div class="row g-4">
+
+  <!-- NHÂN VIÊN -->
+  <div class="col-lg-6">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-header bg-primary text-white fw-bold">
+        <i class="bi bi-person me-2"></i>Dành cho Nhân viên
+      </div>
+      <div class="card-body p-4">
+
+        <div class="d-flex gap-3 mb-4">
+          <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center flex-shrink-0 fw-bold" style="width:32px;height:32px;">1</div>
+          <div>
+            <div class="fw-semibold">Vào Fanpages → chọn page của bạn</div>
+            <div class="text-muted small">Chỉ những page admin phân quyền mới hiển thị.</div>
+          </div>
+        </div>
+
+        <div class="d-flex gap-3 mb-4">
+          <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center flex-shrink-0 fw-bold" style="width:32px;height:32px;">2</div>
+          <div>
+            <div class="fw-semibold">Thiết lập lịch tuần</div>
+            <div class="text-muted small">Chọn số bài/ngày, loại sản phẩm, khoảng giá → bấm <strong>Tạo lịch</strong>. Hệ thống tự phân bổ sản phẩm vào 7 ngày.</div>
+          </div>
+        </div>
+
+        <div class="d-flex gap-3 mb-4">
+          <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center flex-shrink-0 fw-bold" style="width:32px;height:32px;">3</div>
+          <div>
+            <div class="fw-semibold">Soạn content cho từng slot</div>
+            <div class="text-muted small">Bấm vào sản phẩm trong lịch → chọn caption từ thư viện hoặc tự viết mới → upload ảnh → bấm <strong>Lưu</strong>.</div>
+          </div>
+        </div>
+
+        <div class="d-flex gap-3 mb-4">
+          <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center flex-shrink-0 fw-bold" style="width:32px;height:32px;">4</div>
+          <div>
+            <div class="fw-semibold">Dùng kho ảnh Drive</div>
+            <div class="text-muted small">Trong cửa sổ soạn bài → tab <strong>Kho ảnh</strong> → chọn ảnh có sẵn từ Drive theo sản phẩm.</div>
+          </div>
+        </div>
+
+        <div class="d-flex gap-3">
+          <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center flex-shrink-0 fw-bold" style="width:32px;height:32px;">5</div>
+          <div>
+            <div class="fw-semibold">Lưu caption hay vào thư viện</div>
+            <div class="text-muted small">Bấm <strong>Lưu vào thư viện</strong> để đồng nghiệp dùng lại cho lần sau.</div>
+          </div>
+        </div>
+
+        <hr class="my-4">
+        <div class="alert alert-warning py-2 small mb-0">
+          <i class="bi bi-exclamation-triangle me-1"></i>
+          Quên mật khẩu hoặc không thấy page? Liên hệ admin để được hỗ trợ.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ADMIN -->
+  {% if current_user.role == 'admin' %}
+  <div class="col-lg-6">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-header bg-warning text-dark fw-bold">
+        <i class="bi bi-shield-lock me-2"></i>Dành cho Admin
+      </div>
+      <div class="card-body p-4">
+
+        <div class="d-flex gap-3 mb-4">
+          <div class="rounded-circle bg-warning text-dark d-flex align-items-center justify-content-center flex-shrink-0 fw-bold" style="width:32px;height:32px;">1</div>
+          <div>
+            <div class="fw-semibold">Import sản phẩm từ Excel</div>
+            <div class="text-muted small">Menu <strong>Upload Excel</strong> → tải file mẫu về → điền thông tin → upload. Hệ thống tự cập nhật, không xóa dữ liệu cũ.</div>
+          </div>
+        </div>
+
+        <div class="d-flex gap-3 mb-4">
+          <div class="rounded-circle bg-warning text-dark d-flex align-items-center justify-content-center flex-shrink-0 fw-bold" style="width:32px;height:32px;">2</div>
+          <div>
+            <div class="fw-semibold">Quản lý sản phẩm</div>
+            <div class="text-muted small">Menu <strong>Sản phẩm</strong> → sửa loại (Mass/Order/Thanh lý), tình trạng kho, mức ưu tiên cho từng sản phẩm.</div>
+          </div>
+        </div>
+
+        <div class="d-flex gap-3 mb-4">
+          <div class="rounded-circle bg-warning text-dark d-flex align-items-center justify-content-center flex-shrink-0 fw-bold" style="width:32px;height:32px;">3</div>
+          <div>
+            <div class="fw-semibold">Tạo fanpage & phân quyền</div>
+            <div class="text-muted small"><strong>Admin → Quản lý fanpage</strong> → tạo page → thêm nhân viên vào từng page. Nhân viên chỉ thấy page được phân quyền.</div>
+          </div>
+        </div>
+
+        <div class="d-flex gap-3 mb-4">
+          <div class="rounded-circle bg-warning text-dark d-flex align-items-center justify-content-center flex-shrink-0 fw-bold" style="width:32px;height:32px;">4</div>
+          <div>
+            <div class="fw-semibold">Tạo tài khoản nhân viên</div>
+            <div class="text-muted small"><strong>Admin → Quản lý nhân viên</strong> → tạo tài khoản. Mỗi người 1 tài khoản riêng.</div>
+          </div>
+        </div>
+
+        <div class="d-flex gap-3">
+          <div class="rounded-circle bg-warning text-dark d-flex align-items-center justify-content-center flex-shrink-0 fw-bold" style="width:32px;height:32px;">5</div>
+          <div>
+            <div class="fw-semibold">Duyệt & hoán đổi sản phẩm</div>
+            <div class="text-muted small">Menu <strong>Duyệt</strong> → xem lịch tổng tất cả page → kéo thả hoặc bấm hoán đổi để đổi vị trí sản phẩm giữa các ngày.</div>
+          </div>
+        </div>
+
+        <hr class="my-4">
+        <div class="alert alert-danger py-2 small mb-0">
+          <i class="bi bi-person-dash me-1"></i>
+          Nhân viên nghỉ việc? Vào <strong>Quản lý nhân viên</strong> → vô hiệu hoá tài khoản ngay.
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Kho ảnh Drive -->
+  <div class="col-12">
+    <div class="card border-0 shadow-sm">
+      <div class="card-header bg-success text-white fw-bold">
+        <i class="bi bi-google me-2"></i>Kho ảnh Google Drive — cách thêm ảnh mới
+      </div>
+      <div class="card-body p-4">
+        <div class="row g-3">
+          <div class="col-md-4 text-center">
+            <div class="fs-1 mb-2">📁</div>
+            <div class="fw-semibold mb-1">Bước 1</div>
+            <div class="text-muted small">Mở Google Drive → vào folder <strong>ảnh sale</strong> chính</div>
+          </div>
+          <div class="col-md-4 text-center">
+            <div class="fs-1 mb-2">🏷️</div>
+            <div class="fw-semibold mb-1">Bước 2</div>
+            <div class="text-muted small">Tạo folder con đặt tên bắt đầu bằng <strong>barcode</strong><br>VD: <code>SP001 - Áo thun nam</code></div>
+          </div>
+          <div class="col-md-4 text-center">
+            <div class="fs-1 mb-2">📸</div>
+            <div class="fw-semibold mb-1">Bước 3</div>
+            <div class="text-muted small">Upload ảnh sản phẩm vào folder đó. App tự đồng bộ khi soạn bài.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

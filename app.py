@@ -710,6 +710,12 @@ def product_delete(product_id):
 
 # ── Content library ───────────────────────────────────────────────────────────
 
+@app.route("/help")
+@login_required
+def help_page():
+    return render_template("help.html")
+
+
 @app.route("/content-library")
 @login_required
 def content_library():

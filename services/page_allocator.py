@@ -55,7 +55,7 @@ def allocate_page_week(products, type_ratios, category_ratios, min_price, max_pr
     When allow_repeat=False products are de-duplicated within the week.
     When allow_repeat=True the pool is cycled to fill all slots.
     """
-    per_day = max(MIN_PER_DAY, min(MAX_PER_DAY, per_day))
+    per_day = max(1, int(per_day))
     total_slots = DAYS * per_day
 
     # Filter by price
@@ -84,7 +84,7 @@ def allocate_page_week(products, type_ratios, category_ratios, min_price, max_pr
     final = _select_by_ratios(by_cat, category_ratios, len(selected_by_type))
 
     if allow_repeat and final and len(final) < total_slots:
-        pool = final[:]
+        pool = sorted(final, key=lambda p: (_uu_tien_sort(p), -float(p.get("gia_ban") or 0)))
         final = [pool[i % len(pool)] for i in range(total_slots)]
 
     # Distribute across 7 days

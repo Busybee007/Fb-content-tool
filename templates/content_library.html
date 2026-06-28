@@ -1,0 +1,325 @@
+{% extends "base.html" %}
+{% block title %}Kho content – {{ app_name }}{% endblock %}
+
+{% block extra_head %}
+<style>
+.product-card { background:#fff; border:1px solid #e9ecef; border-radius:10px; margin-bottom:1rem; overflow:hidden; }
+.product-card-header { background:#f8f9fa; padding:12px 16px; border-bottom:1px solid #e9ecef; cursor:pointer; }
+.version-card { border:1px solid #e9ecef; border-radius:8px; padding:12px; margin-bottom:8px; background:#fafafa; }
+.version-card:hover { border-color:#1877f2; background:#f0f4ff; }
+.caption-preview { font-size:13px; color:#444; white-space:pre-wrap; max-height:80px; overflow:hidden; position:relative; }
+.caption-preview::after { content:''; position:absolute; bottom:0; left:0; right:0; height:24px; background:linear-gradient(transparent, #fafafa); }
+.media-thumb { width:60px; height:60px; object-fit:cover; border-radius:6px; flex-shrink:0; }
+.media-ph { width:60px; height:60px; background:#f0f0f0; border-radius:6px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-hero mb-4 d-flex justify-content-between align-items-start flex-wrap gap-3">
+    <div>
+        <h1 class="h3 fw-bold mb-1"><i class="bi bi-journal-richtext me-2"></i>Kho content</h1>
+        <p class="mb-0 opacity-90">Quản lý các phiên bản content theo barcode sản phẩm.</p>
+    </div>
+    <button class="btn btn-light btn-sm fw-semibold" onclick="openCreateForm()">
+        <i class="bi bi-plus-lg me-1"></i>Thêm content mới
+    </button>
+</div>
+
+{% if not products %}
+<div class="text-center py-5">
+    <i class="bi bi-journal-x display-4 d-block mb-3 text-muted opacity-50"></i>
+    <p class="text-muted mb-3">Chưa có content nào trong kho. Nhấn "Thêm content mới" để bắt đầu.</p>
+</div>
+{% else %}
+<div class="mb-3">
+    <input type="text" class="form-control" id="librarySearch" placeholder="Tìm theo tên sản phẩm hoặc mã vạch...">
+</div>
+<div id="libraryList">
+{% for p in products %}
+<div class="product-card" data-search="{{ ((p.name or '') ~ ' ' ~ p.ma_vach)|lower|e }}">
+    <div class="product-card-header d-flex align-items-center gap-3"
+         onclick="toggleProduct('pc-{{ loop.index }}')">
+        {% if p.link_anh %}
+        <img src="{{ p.link_anh }}" style="width:44px;height:44px;object-fit:cover;border-radius:6px;flex-shrink:0"
+             onerror="this.style.display='none'" alt="">
+        {% else %}
+        <div style="width:44px;height:44px;background:#e9ecef;border-radius:6px;flex-shrink:0;display:flex;align-items:center;justify-content:center;">
+            <i class="bi bi-image text-muted"></i>
+        </div>
+        {% endif %}
+        <div class="flex-grow-1">
+            <div class="fw-semibold">{{ p.name or p.ma_vach }}</div>
+            <div class="small text-muted">
+                Mã: {{ p.ma_vach }}
+                {% if p.danh_muc %} · {{ p.danh_muc }}{% endif %}
+                {% if p.gia_ban %} · {{ "{:,.0f}".format(p.gia_ban) }}đ{% endif %}
+            </div>
+        </div>
+        <span class="badge bg-primary">{{ p.version_count }} phiên bản</span>
+        <i class="bi bi-chevron-down text-muted" id="chevron-pc-{{ loop.index }}"></i>
+    </div>
+    <div class="p-3 d-none" id="pc-{{ loop.index }}">
+        <div id="versions-{{ p.ma_vach|replace('/','_')|replace(' ','_') }}">
+            <div class="text-center py-3 text-muted small">
+                <span class="spinner-border spinner-border-sm me-1"></span>Đang tải...
+            </div>
+        </div>
+        <button class="btn btn-outline-primary btn-sm mt-2"
+                onclick="openCreateForm('{{ p.ma_vach|e }}', '{{ (p.name or '')|e }}')">
+            <i class="bi bi-plus-lg me-1"></i>Thêm phiên bản mới
+        </button>
+    </div>
+</div>
+{% endfor %}
+</div>
+{% endif %}
+
+<!-- Modal tạo / sửa -->
+<div class="modal fade" id="editModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="editModalTitle">Thêm phiên bản content</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="editVersionId">
+                <div class="row g-3 mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label small fw-semibold">Mã vạch sản phẩm <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="editMaVach" placeholder="Nhập mã vạch...">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-semibold">Tên phiên bản</label>
+                        <input type="text" class="form-control" id="editTitle" placeholder="VD: Phiên bản Tết, Khuyến mãi...">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small fw-semibold">Giờ đăng</label>
+                        <input type="time" class="form-control" id="editPostTime">
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold">Caption / Content</label>
+                    <textarea class="form-control" id="editCaption" rows="7" placeholder="Nhập nội dung bài đăng..."></textarea>
+                    <div class="d-flex justify-content-between mt-1">
+                        <span class="form-text" id="editCaptionCount">0 ký tự</span>
+                        <button type="button" class="btn btn-sm btn-link p-0"
+                                onclick="navigator.clipboard.writeText(document.getElementById('editCaption').value)">
+                            <i class="bi bi-clipboard me-1"></i>Copy
+                        </button>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold">Ảnh</label>
+                    <div id="editImgPreview" class="mb-2 d-none">
+                        <img id="editImgEl" src="" style="max-height:160px;border-radius:8px;object-fit:cover;" alt="">
+                        <button type="button" class="btn btn-sm btn-danger ms-2" onclick="removeEditImg()">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </div>
+                    <input type="file" class="form-control" id="editImgFile" accept=".jpg,.jpeg,.png,.gif,.webp">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold">Link video</label>
+                    <input type="url" class="form-control" id="editVideoUrl" placeholder="https://...">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                <button type="button" class="btn btn-primary" id="editSaveBtn" onclick="saveVersion()">
+                    <i class="bi bi-floppy me-1"></i>Lưu
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let editModal = null;
+let editHasNewImg = false;
+let editRemoveImg = false;
+const loadedProducts = new Set();
+
+function toggleProduct(id) {
+    const panel = document.getElementById(id);
+    const chevron = document.getElementById('chevron-' + id);
+    const isHidden = panel.classList.contains('d-none');
+    panel.classList.toggle('d-none');
+    chevron.className = isHidden ? 'bi bi-chevron-up text-muted' : 'bi bi-chevron-down text-muted';
+    if (isHidden && !loadedProducts.has(id)) {
+        loadedProducts.add(id);
+        // Derive ma_vach from container's versions div
+        const versionsDiv = panel.querySelector('[id^="versions-"]');
+        const rawKey = versionsDiv.id.replace('versions-', '');
+        // Find actual ma_vach from the hidden badge text or data attribute - use button's onclick
+        const btn = panel.querySelector('button[onclick*="openCreateForm"]');
+        const match = btn.getAttribute('onclick').match(/openCreateForm\('([^']+)'/);
+        if (match) loadVersions(match[1], versionsDiv.id);
+    }
+}
+
+function loadVersions(maVach, containerId) {
+    fetch('/api/library/' + encodeURIComponent(maVach))
+        .then(r => r.json())
+        .then(versions => {
+            const el = document.getElementById(containerId);
+            if (!versions.length) {
+                el.innerHTML = '<p class="text-muted small">Chưa có phiên bản nào.</p>';
+                return;
+            }
+            el.innerHTML = versions.map(v => renderVersionCard(v)).join('');
+        });
+}
+
+function renderVersionCard(v) {
+    const imgHtml = v.media_type === 'image' && v.media_value
+        ? `<img src="/static/${v.media_value}" class="media-thumb me-3" onerror="this.style.display='none'" alt="">`
+        : `<div class="media-ph me-3"><i class="bi bi-image text-muted"></i></div>`;
+    const videoHtml = v.media_type === 'video' && v.media_value
+        ? `<div class="small text-primary mt-1"><i class="bi bi-play-circle me-1"></i><a href="${v.media_value}" target="_blank" class="text-truncate d-inline-block" style="max-width:200px">${v.media_value}</a></div>` : '';
+    const timeHtml = v.post_time ? `<span class="badge bg-light text-dark border me-1"><i class="bi bi-clock me-1"></i>${v.post_time}</span>` : '';
+    const titleHtml = v.title ? `<span class="fw-semibold">${escHtml(v.title)}</span> · ` : '';
+    return `<div class="version-card d-flex gap-3" id="vc-${v.id}">
+        ${imgHtml}
+        <div class="flex-grow-1 overflow-hidden">
+            <div class="small text-muted mb-1">${titleHtml}${timeHtml}<span class="text-muted" style="font-size:11px;">${v.created_at.slice(0,10)}</span></div>
+            <div class="caption-preview">${escHtml(v.caption || '(Chưa có caption)')}</div>
+            ${videoHtml}
+        </div>
+        <div class="d-flex flex-column gap-1 flex-shrink-0">
+            <button class="btn btn-outline-primary btn-sm" onclick="openEditForm(${v.id})">
+                <i class="bi bi-pencil"></i>
+            </button>
+            <button class="btn btn-outline-danger btn-sm" onclick="deleteVersion(${v.id}, '${escAttr(v.ma_vach)}')">
+                <i class="bi bi-trash"></i>
+            </button>
+        </div>
+    </div>`;
+}
+
+function escHtml(str) {
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function escAttr(str) {
+    return String(str).replace(/'/g,"\\'");
+}
+
+function openCreateForm(maVach, productName) {
+    document.getElementById('editVersionId').value = '';
+    document.getElementById('editMaVach').value = maVach || '';
+    document.getElementById('editMaVach').readOnly = !!maVach;
+    document.getElementById('editTitle').value = '';
+    document.getElementById('editCaption').value = '';
+    document.getElementById('editPostTime').value = '';
+    document.getElementById('editVideoUrl').value = '';
+    document.getElementById('editImgFile').value = '';
+    document.getElementById('editImgPreview').classList.add('d-none');
+    document.getElementById('editModalTitle').textContent = productName
+        ? `Thêm phiên bản — ${productName}` : 'Thêm phiên bản content mới';
+    editHasNewImg = false; editRemoveImg = false;
+    updateEditCount();
+    if (!editModal) editModal = new bootstrap.Modal(document.getElementById('editModal'));
+    editModal.show();
+}
+
+function openEditForm(versionId) {
+    fetch('/api/library/version/' + versionId)
+        .then(r => r.json())
+        .then(v => {
+            document.getElementById('editVersionId').value = v.id;
+            document.getElementById('editMaVach').value = v.ma_vach;
+            document.getElementById('editMaVach').readOnly = true;
+            document.getElementById('editTitle').value = v.title || '';
+            document.getElementById('editCaption').value = v.caption || '';
+            document.getElementById('editPostTime').value = v.post_time || '';
+            document.getElementById('editVideoUrl').value = v.media_type === 'video' ? (v.media_value || '') : '';
+            document.getElementById('editImgFile').value = '';
+            if (v.media_type === 'image' && v.media_value) {
+                document.getElementById('editImgEl').src = '/static/' + v.media_value;
+                document.getElementById('editImgPreview').classList.remove('d-none');
+            } else {
+                document.getElementById('editImgPreview').classList.add('d-none');
+            }
+            document.getElementById('editModalTitle').textContent = 'Sửa phiên bản content';
+            editHasNewImg = false; editRemoveImg = false;
+            updateEditCount();
+            if (!editModal) editModal = new bootstrap.Modal(document.getElementById('editModal'));
+            editModal.show();
+        });
+}
+
+function removeEditImg() {
+    document.getElementById('editImgEl').src = '';
+    document.getElementById('editImgPreview').classList.add('d-none');
+    document.getElementById('editImgFile').value = '';
+    editRemoveImg = true; editHasNewImg = false;
+}
+
+document.getElementById('editCaption').addEventListener('input', updateEditCount);
+function updateEditCount() {
+    document.getElementById('editCaptionCount').textContent =
+        document.getElementById('editCaption').value.length.toLocaleString('vi-VN') + ' ký tự';
+}
+
+document.getElementById('editImgFile').addEventListener('change', function() {
+    if (this.files && this.files[0]) {
+        const reader = new FileReader();
+        reader.onload = e => {
+            document.getElementById('editImgEl').src = e.target.result;
+            document.getElementById('editImgPreview').classList.remove('d-none');
+            editHasNewImg = true; editRemoveImg = false;
+        };
+        reader.readAsDataURL(this.files[0]);
+    }
+});
+
+function saveVersion() {
+    const versionId = document.getElementById('editVersionId').value;
+    const maVach    = document.getElementById('editMaVach').value.trim();
+    if (!maVach) { alert('Vui lòng nhập mã vạch.'); return; }
+    const btn = document.getElementById('editSaveBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Đang lưu...';
+    const fd = new FormData();
+    fd.append('ma_vach',   maVach);
+    fd.append('title',     document.getElementById('editTitle').value);
+    fd.append('caption',   document.getElementById('editCaption').value);
+    fd.append('post_time', document.getElementById('editPostTime').value);
+    fd.append('remove_media', editRemoveImg ? '1' : '0');
+    fd.append('video_url', document.getElementById('editVideoUrl').value);
+    if (editHasNewImg) fd.append('image_file', document.getElementById('editImgFile').files[0]);
+    const url = versionId ? `/api/library/${versionId}` : '/api/library';
+    fetch(url, { method: 'POST', body: fd })
+        .then(r => r.json())
+        .then(data => {
+            if (!data.ok) { alert('Lỗi: ' + (data.error || '?')); return; }
+            editModal.hide();
+            location.reload();
+        })
+        .catch(() => alert('Lỗi kết nối.'))
+        .finally(() => {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-floppy me-1"></i>Lưu';
+        });
+}
+
+function deleteVersion(versionId, maVach) {
+    if (!confirm('Xóa phiên bản này?')) return;
+    fetch(`/api/library/${versionId}/delete`, { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            if (data.ok) document.getElementById('vc-' + versionId).remove();
+        });
+}
+
+// Search
+document.getElementById('librarySearch').addEventListener('input', function() {
+    const q = this.value.toLowerCase();
+    document.querySelectorAll('#libraryList .product-card').forEach(card => {
+        card.style.display = (!q || card.dataset.search.includes(q)) ? '' : 'none';
+    });
+});
+</script>
+{% endblock %}

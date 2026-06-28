@@ -1,12 +1,20 @@
 import io
 import os
 from datetime import date, timedelta
+
+# Load .env nếu có
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 from uuid import uuid4
 
 from flask import (
     Flask,
     abort,
     flash,
+    jsonify,
     redirect,
     render_template,
     request,
@@ -36,7 +44,7 @@ os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
 os.makedirs(app.config["MEDIA_FOLDER"], exist_ok=True)
 db.init_db()
 
-APP_NAME = "Facebook Content Tool"
+APP_NAME = "FBTool"
 
 WEEKDAY_VI = ["Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5", "Thứ 6", "Thứ 7", "Chủ nhật"]
 
@@ -120,9 +128,17 @@ def upload():
         with open(save_path, "wb") as f:
             f.write(file_bytes)
 
-        db.clear_all_products()
-        db.insert_products(products)
-        flash(f"Đã import {len(products)} sản phẩm từ {len(db.get_categories())} danh mục.", "success")
+        inserted, updated, missing = db.upsert_products(products)
+        parts = []
+        if inserted: parts.append(f"thêm mới {inserted} sản phẩm")
+        if updated:  parts.append(f"cập nhật {updated} sản phẩm")
+        flash(f"Import thành công: {', '.join(parts) or 'không có thay đổi'}.", "success")
+        if missing:
+            flash(
+                f"Lưu ý: {missing} sản phẩm trong hệ thống không có trong file vừa upload "
+                f"(có thể bị sót). Kiểm tra lại nếu cần.",
+                "warning",
+            )
         return redirect(url_for("upload"))
 
     return render_template("upload.html", preview=preview, total=total,
@@ -304,6 +320,11 @@ def page_setup(page_id):
         db.set_page_setting(page_id, "filter", {"min_price": min_price, "max_price": max_price})
         db.set_page_setting(page_id, "per_day", per_day_val)
 
+        # Bảo vệ content: nếu tuần đã có caption thì yêu cầu xác nhận
+        if db.has_week_content(page_id, week_start_str) and not request.form.get("confirm_overwrite"):
+            flash("Tuần này đã có content đã viết. Tích vào ô 'Xác nhận tạo lại' bên dưới để tiếp tục (toàn bộ content tuần này sẽ bị xóa).", "warning")
+            return redirect(url_for("page_setup", page_id=page_id))
+
         # Generate 7-day schedule
         start = date.fromisoformat(week_start_str)
         slots = allocate_page_week(products, new_type, new_cat, min_price, max_price,
@@ -348,6 +369,7 @@ def page_schedule(page_id):
     ]
     total_slots = sum(len(v) for v in schedule.values())
 
+    all_products = db.get_all_products()
     return render_template(
         "page_schedule.html",
         fanpage=fanpage,
@@ -356,6 +378,7 @@ def page_schedule(page_id):
         week_start=week_start,
         weeks=weeks,
         total_slots=total_slots,
+        all_products=all_products,
     )
 
 
@@ -377,6 +400,25 @@ def schedule_swap(page_id):
 
 
 # ── Per-page: content (captions) ─────────────────────────────────────────────
+
+@app.route("/pages/<int:page_id>/schedule/week-status")
+@page_access_required
+def schedule_week_status(page_id):
+    week_start = request.args.get("week_start") or _current_monday()
+    return jsonify({"has_content": db.has_week_content(page_id, week_start)})
+
+
+@app.route("/pages/<int:page_id>/schedule/replace", methods=["POST"])
+@page_access_required
+def schedule_replace(page_id):
+    slot_id = request.json.get("slot_id") if request.is_json else request.form.get("slot_id", type=int)
+    product_id = request.json.get("product_id") if request.is_json else request.form.get("product_id", type=int)
+    if not slot_id or not product_id:
+        return jsonify({"ok": False, "error": "Thiếu tham số"}), 400
+    db.replace_slot_product(slot_id, product_id)
+    product = db.get_product(product_id)
+    return jsonify({"ok": True, "product": product})
+
 
 @app.route("/pages/<int:page_id>/content", methods=["GET", "POST"])
 @page_access_required
@@ -576,6 +618,316 @@ def admin_pages():
     }
     return render_template("admin_pages.html", pages=pages, all_users=all_users,
                            page_users=page_users, page_unassigned=page_unassigned)
+
+
+# ── Admin: product management ────────────────────────────────────────────────
+
+@app.route("/products")
+@admin_required
+def products_list():
+    q       = request.args.get("q", "").strip()
+    cat_f   = request.args.get("cat", "").strip()
+    type_f  = request.args.get("type", "").strip()
+    products = db.get_all_products()
+    if q:
+        ql = q.lower()
+        products = [p for p in products
+                    if ql in (p.get("name") or "").lower()
+                    or ql in (p.get("ma_vach") or "").lower()]
+    if cat_f:
+        products = [p for p in products if p.get("danh_muc") == cat_f]
+    if type_f:
+        products = [p for p in products if p.get("chien_luoc") == type_f]
+    categories = db.get_categories()
+    return render_template("products.html", products=products,
+                           categories=categories, q=q, cat_f=cat_f, type_f=type_f)
+
+
+@app.route("/products/add", methods=["POST"])
+@admin_required
+def product_add():
+    ma_vach       = request.form.get("ma_vach", "").strip()
+    name          = request.form.get("name", "").strip()
+    link_anh      = request.form.get("link_anh", "").strip()
+    gia_ban       = request.form.get("gia_ban", "0")
+    danh_muc      = request.form.get("danh_muc", "").strip()
+    tinh_trang_kho= request.form.get("tinh_trang_kho", "san")
+    chien_luoc    = request.form.get("chien_luoc", "mass")
+    uu_tien       = request.form.get("uu_tien", "2")
+    if not ma_vach or not name:
+        flash("Mã vạch và tên sản phẩm không được để trống.", "danger")
+    else:
+        _, err = db.add_product(ma_vach, name, link_anh, gia_ban,
+                                danh_muc, tinh_trang_kho, chien_luoc, uu_tien)
+        if err:
+            flash(err, "danger")
+        else:
+            flash(f"Đã thêm sản phẩm '{name}' ({ma_vach}).", "success")
+    return redirect(url_for("products_list"))
+
+
+@app.route("/products/<int:product_id>/edit", methods=["POST"])
+@admin_required
+def product_edit(product_id):
+    p = db.get_product(product_id)
+    if not p:
+        flash("Không tìm thấy sản phẩm.", "danger")
+        return redirect(url_for("products_list"))
+    # Only update fields present in form; fall back to existing values
+    chien_luoc     = request.form.get("chien_luoc", p["chien_luoc"])
+    tinh_trang_kho = request.form.get("tinh_trang_kho", p["tinh_trang_kho"])
+    uu_tien        = request.form.get("uu_tien", p["uu_tien"])
+    name           = request.form.get("name", p["name"]) or p["name"]
+    link_anh       = request.form.get("link_anh", p["link_anh"] or "")
+    gia_ban        = request.form.get("gia_ban", p["gia_ban"])
+    danh_muc       = request.form.get("danh_muc", p["danh_muc"] or "")
+    db.update_product(product_id, name, link_anh, gia_ban,
+                      danh_muc, tinh_trang_kho, chien_luoc, uu_tien)
+    flash("Đã cập nhật sản phẩm.", "success")
+    return redirect(url_for("products_list"))
+
+
+@app.route("/products/<int:product_id>/delete", methods=["POST"])
+@admin_required
+def product_delete(product_id):
+    p = db.get_product(product_id)
+    if not p:
+        flash("Không tìm thấy sản phẩm.", "danger")
+        return redirect(url_for("products_list"))
+    slot_count = db.count_product_slots(product_id)
+    confirmed = request.form.get("confirm_delete") == "1"
+    if slot_count > 0 and not confirmed:
+        flash(
+            f"Sản phẩm '{p['name']}' đang có trong {slot_count} slot lịch. "
+            f"Xác nhận xóa sẽ xóa luôn các slot đó.",
+            "warning",
+        )
+        return redirect(url_for("products_list"))
+    db.delete_product(product_id)
+    flash(f"Đã xóa sản phẩm '{p['name']}'.", "success")
+    return redirect(url_for("products_list"))
+
+
+# ── Content library ───────────────────────────────────────────────────────────
+
+@app.route("/content-library")
+@login_required
+def content_library():
+    products = db.get_all_library_products()
+    return render_template("content_library.html", products=products)
+
+
+@app.route("/api/library/<path:ma_vach>")
+@login_required
+def api_library_list(ma_vach):
+    return jsonify(db.get_library_versions(ma_vach))
+
+
+@app.route("/api/library", methods=["POST"])
+@login_required
+def api_library_create():
+    ma_vach = request.form.get("ma_vach", "").strip()
+    if not ma_vach:
+        return jsonify({"ok": False, "error": "Thiếu mã vạch"}), 400
+    title      = request.form.get("title", "").strip()
+    caption    = request.form.get("caption", "").strip()
+    post_time  = request.form.get("post_time", "").strip()
+    media_type = request.form.get("media_type", "").strip()
+    media_value= request.form.get("media_value", "").strip()
+    file = request.files.get("image_file")
+    if file and file.filename:
+        ext = os.path.splitext(file.filename)[1].lower()
+        if ext not in ALLOWED_IMAGE_EXT:
+            return jsonify({"ok": False, "error": "Chỉ hỗ trợ JPG, PNG, GIF, WEBP"}), 400
+        filename = f"lib_{ma_vach.replace('/', '_')}_{uuid4().hex}{ext}"
+        file.save(os.path.join(app.config["MEDIA_FOLDER"], filename))
+        media_type  = "image"
+        media_value = f"media/{filename}"
+    drive_img = request.form.get("drive_image_url", "").strip()
+    vid = request.form.get("video_url", "").strip()
+    if drive_img and not file:
+        media_type  = "image"
+        media_value = drive_img
+    elif vid and not file:
+        media_type  = "video"
+        media_value = vid
+    version_id = db.create_library_version(
+        ma_vach, title, caption, media_type, media_value, post_time, current_user.id
+    )
+    return jsonify({"ok": True, "id": version_id,
+                    "media_type": media_type, "media_value": media_value})
+
+
+@app.route("/api/library/version/<int:version_id>")
+@login_required
+def api_library_get(version_id):
+    ver = db.get_library_version(version_id)
+    if not ver:
+        return jsonify({"ok": False}), 404
+    return jsonify(ver)
+
+
+@app.route("/api/library/<int:version_id>", methods=["POST"])
+@login_required
+def api_library_update(version_id):
+    ver = db.get_library_version(version_id)
+    if not ver:
+        return jsonify({"ok": False, "error": "Không tìm thấy"}), 404
+    title      = request.form.get("title", "").strip()
+    caption    = request.form.get("caption", "").strip()
+    post_time  = request.form.get("post_time", "").strip()
+    media_type = ver["media_type"]
+    media_value= ver["media_value"]
+    file = request.files.get("image_file")
+    if file and file.filename:
+        ext = os.path.splitext(file.filename)[1].lower()
+        if ext not in ALLOWED_IMAGE_EXT:
+            return jsonify({"ok": False, "error": "Chỉ hỗ trợ JPG, PNG, GIF, WEBP"}), 400
+        filename = f"lib_{ver['ma_vach'].replace('/', '_')}_{uuid4().hex}{ext}"
+        file.save(os.path.join(app.config["MEDIA_FOLDER"], filename))
+        media_type  = "image"
+        media_value = f"media/{filename}"
+    elif request.form.get("remove_media") == "1":
+        media_type  = ""
+        media_value = ""
+    elif request.form.get("drive_image_url", "").strip():
+        media_type  = "image"
+        media_value = request.form.get("drive_image_url", "").strip()
+    elif request.form.get("video_url", "").strip():
+        media_type  = "video"
+        media_value = request.form.get("video_url", "").strip()
+    db.update_library_version(version_id, title, caption, media_type, media_value, post_time)
+    return jsonify({"ok": True, "media_type": media_type, "media_value": media_value})
+
+
+@app.route("/api/library/<int:version_id>/delete", methods=["POST"])
+@login_required
+def api_library_delete(version_id):
+    old = db.delete_library_version(version_id)
+    if old and old.get("media_type") == "image" and old.get("media_value"):
+        path = os.path.join(app.root_path, "static", old["media_value"])
+        if os.path.exists(path):
+            os.remove(path)
+    return jsonify({"ok": True})
+
+
+@app.route("/api/library/<int:version_id>/apply", methods=["POST"])
+@login_required
+def api_library_apply(version_id):
+    """Apply a library version as the active content for a product barcode."""
+    ver = db.get_library_version(version_id)
+    if not ver:
+        return jsonify({"ok": False, "error": "Không tìm thấy"}), 404
+    db.save_product_content(
+        ver["ma_vach"], ver["caption"], ver["media_type"], ver["media_value"], ver["post_time"]
+    )
+    return jsonify({"ok": True, "version": ver})
+
+
+# ── Drive photos API (tất cả nhân viên) ──────────────────────────────────────
+
+@app.route("/api/drive/status")
+@login_required
+def api_drive_status():
+    from services import gdrive
+    return jsonify({"configured": gdrive.is_configured()})
+
+
+@app.route("/api/drive/photos/<path:ma_vach>")
+@login_required
+def api_drive_list(ma_vach):
+    from services import gdrive
+    if not gdrive.is_configured():
+        return jsonify({"photos": [], "folder": None, "configured": False})
+    try:
+        photos, folder = gdrive.list_photos_by_barcode(ma_vach)
+        return jsonify({"photos": photos, "folder": folder, "configured": True})
+    except Exception as e:
+        return jsonify({"photos": [], "folder": None, "configured": True, "error": str(e)})
+
+
+# ── Product photos API ───────────────────────────────────────────────────────
+
+@app.route("/api/product-photos/<path:ma_vach>")
+@login_required
+def api_get_product_photos(ma_vach):
+    photos = db.get_product_photos(ma_vach)
+    for ph in photos:
+        ph["url"] = "/" + ph["filepath"].replace("\\", "/")
+    return jsonify(photos)
+
+
+@app.route("/api/product-photos", methods=["POST"])
+@login_required
+def api_upload_product_photo():
+    ma_vach = request.form.get("ma_vach", "").strip()
+    if not ma_vach:
+        return jsonify({"ok": False, "error": "Thiếu mã vạch"}), 400
+    file = request.files.get("photo")
+    if not file or not file.filename:
+        return jsonify({"ok": False, "error": "Thiếu file"}), 400
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext not in ALLOWED_IMAGE_EXT:
+        return jsonify({"ok": False, "error": "Chỉ hỗ trợ JPG, PNG, GIF, WEBP"}), 400
+
+    safe_bc = ma_vach.replace("/", "_").replace("\\", "_")
+    photo_dir = os.path.join(app.config["MEDIA_FOLDER"], "photos", safe_bc)
+    os.makedirs(photo_dir, exist_ok=True)
+
+    filename  = f"{uuid4().hex}{ext}"
+    full_path = os.path.join(photo_dir, filename)
+    file.save(full_path)
+
+    # filepath relative to static/  so we can build URL
+    rel = os.path.relpath(full_path, os.path.join(app.root_path, "static")).replace("\\", "/")
+    photo_id = db.add_product_photo(ma_vach, secure_filename(file.filename), f"static/{rel}", current_user.id)
+    return jsonify({"ok": True, "id": photo_id, "url": f"/static/{rel}", "filename": secure_filename(file.filename)})
+
+
+@app.route("/api/product-photos/<int:photo_id>/delete", methods=["POST"])
+@login_required
+def api_delete_product_photo(photo_id):
+    ph = db.delete_product_photo(photo_id)
+    if ph and ph.get("filepath"):
+        full = os.path.join(app.root_path, ph["filepath"])
+        if os.path.exists(full):
+            os.remove(full)
+    return jsonify({"ok": True})
+
+
+# ── Product content API ───────────────────────────────────────────────────────
+
+@app.route("/api/product-content/<path:ma_vach>")
+@login_required
+def api_get_product_content(ma_vach):
+    content = db.get_product_content(ma_vach)
+    return jsonify(content or {})
+
+
+@app.route("/api/product-content", methods=["POST"])
+@login_required
+def api_save_product_content():
+    ma_vach = request.form.get("ma_vach", "").strip()
+    if not ma_vach:
+        return jsonify({"ok": False, "error": "Thiếu mã vạch"}), 400
+
+    caption = request.form.get("caption", "").strip()
+    post_time = request.form.get("post_time", "").strip()
+    media_type = request.form.get("media_type", "").strip()
+    media_value = request.form.get("media_value", "").strip()
+
+    file = request.files.get("image_file")
+    if file and file.filename:
+        ext = os.path.splitext(file.filename)[1].lower()
+        if ext not in ALLOWED_IMAGE_EXT:
+            return jsonify({"ok": False, "error": "Chỉ hỗ trợ JPG, PNG, GIF, WEBP"}), 400
+        filename = f"pc_{ma_vach.replace('/', '_')}_{uuid4().hex}{ext}"
+        file.save(os.path.join(app.config["MEDIA_FOLDER"], filename))
+        media_type = "image"
+        media_value = f"media/{filename}"
+
+    db.save_product_content(ma_vach, caption, media_type, media_value, post_time)
+    return jsonify({"ok": True, "media_type": media_type, "media_value": media_value})
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

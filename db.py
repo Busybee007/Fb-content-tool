@@ -36,7 +36,7 @@ CREATE TABLE IF NOT EXISTS user_pages (
 
 CREATE TABLE IF NOT EXISTS products (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
-    ma_vach         TEXT,
+    ma_vach         TEXT UNIQUE,
     name            TEXT NOT NULL,
     link_anh        TEXT,
     gia_ban         REAL DEFAULT 0,
@@ -80,6 +80,60 @@ CREATE TABLE IF NOT EXISTS app_settings (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS content_library (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    ma_vach     TEXT NOT NULL,
+    title       TEXT DEFAULT '',
+    caption     TEXT DEFAULT '',
+    media_type  TEXT DEFAULT '',
+    media_value TEXT DEFAULT '',
+    post_time   TEXT DEFAULT '',
+    created_by  INTEGER,
+    created_at  TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS product_content (
+    ma_vach    TEXT PRIMARY KEY,
+    caption    TEXT DEFAULT '',
+    media_type TEXT DEFAULT '',
+    media_value TEXT DEFAULT '',
+    post_time  TEXT DEFAULT '',
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS product_photos (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    ma_vach    TEXT NOT NULL,
+    filename   TEXT NOT NULL,
+    filepath   TEXT NOT NULL,
+    uploaded_by INTEGER,
+    uploaded_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (uploaded_by) REFERENCES users(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_product_photos_mavach ON product_photos(ma_vach);
+
+CREATE TABLE IF NOT EXISTS drive_folder_cache (
+    ma_vach   TEXT PRIMARY KEY,
+    folder_id TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS drive_photos (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    ma_vach     TEXT NOT NULL,
+    folder_id   TEXT NOT NULL,
+    file_id     TEXT NOT NULL UNIQUE,
+    filename    TEXT NOT NULL,
+    url         TEXT NOT NULL,
+    thumbnail_url TEXT NOT NULL DEFAULT '',
+    uploaded_by INTEGER,
+    uploaded_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (uploaded_by) REFERENCES users(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_drive_photos_mavach ON drive_photos(ma_vach);
 """
 
 
@@ -110,6 +164,13 @@ def _migrate(conn):
         conn.execute("ALTER TABLE schedule_slots ADD COLUMN media_type TEXT DEFAULT ''")
     if "media_value" not in cols:
         conn.execute("ALTER TABLE schedule_slots ADD COLUMN media_value TEXT DEFAULT ''")
+    if "post_time" not in cols:
+        conn.execute("ALTER TABLE schedule_slots ADD COLUMN post_time TEXT DEFAULT ''")
+
+    # Add UNIQUE index on ma_vach if not exists (safe to run multiple times)
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_products_ma_vach ON products(ma_vach) WHERE ma_vach IS NOT NULL"
+    )
 
 
 def _ensure_admin():
@@ -291,20 +352,24 @@ def user_has_page_access(user_id, page_id, role="employee"):
 
 # ── Products ──────────────────────────────────────────────────────────────────
 
-def clear_all_products():
+def upsert_products(products):
+    """Upsert products by ma_vach. Returns (inserted, updated, deactivated) counts."""
+    incoming_barcodes = {p.get("ma_vach", "") for p in products if p.get("ma_vach")}
     with get_db() as conn:
-        conn.execute("DELETE FROM schedule_slots")
-        conn.execute("DELETE FROM products")
+        total_before = conn.execute("SELECT COUNT(*) FROM products").fetchone()[0]
 
-
-def insert_products(products):
-    with get_db() as conn:
         conn.executemany(
-            """
-            INSERT INTO products (ma_vach,name,link_anh,gia_ban,danh_muc,
-                                  tinh_trang_kho,chien_luoc,uu_tien)
-            VALUES (?,?,?,?,?,?,?,?)
-            """,
+            """INSERT INTO products (ma_vach,name,link_anh,gia_ban,danh_muc,
+                                     tinh_trang_kho,chien_luoc,uu_tien)
+               VALUES (?,?,?,?,?,?,?,?)
+               ON CONFLICT(ma_vach) DO UPDATE SET
+                   name=excluded.name,
+                   link_anh=excluded.link_anh,
+                   gia_ban=excluded.gia_ban,
+                   danh_muc=excluded.danh_muc,
+                   tinh_trang_kho=excluded.tinh_trang_kho,
+                   chien_luoc=excluded.chien_luoc,
+                   uu_tien=excluded.uu_tien""",
             [
                 (
                     p.get("ma_vach", ""),
@@ -319,6 +384,68 @@ def insert_products(products):
                 for p in products
             ],
         )
+        total_after = conn.execute("SELECT COUNT(*) FROM products").fetchone()[0]
+
+        # Barcodes in DB but not in new file
+        if incoming_barcodes:
+            placeholders = ",".join("?" * len(incoming_barcodes))
+            missing = conn.execute(
+                f"SELECT COUNT(*) FROM products WHERE ma_vach NOT IN ({placeholders})",
+                list(incoming_barcodes),
+            ).fetchone()[0]
+        else:
+            missing = total_after
+
+    inserted = total_after - total_before
+    updated  = len(products) - inserted
+    return inserted, updated, missing
+
+
+# Kept for backward compat — no longer wipes schedule_slots
+def clear_all_products():
+    pass
+
+
+def insert_products(products):
+    upsert_products(products)
+
+
+def add_product(ma_vach, name, link_anh, gia_ban, danh_muc, tinh_trang_kho, chien_luoc, uu_tien):
+    with get_db() as conn:
+        try:
+            conn.execute(
+                """INSERT INTO products (ma_vach,name,link_anh,gia_ban,danh_muc,
+                                         tinh_trang_kho,chien_luoc,uu_tien)
+                   VALUES (?,?,?,?,?,?,?,?)""",
+                (ma_vach, name, link_anh, float(gia_ban or 0), danh_muc,
+                 tinh_trang_kho, chien_luoc, str(uu_tien)),
+            )
+            return conn.execute("SELECT last_insert_rowid()").fetchone()[0], None
+        except sqlite3.IntegrityError:
+            return None, "Mã vạch đã tồn tại trong hệ thống."
+
+
+def update_product(product_id, name, link_anh, gia_ban, danh_muc, tinh_trang_kho, chien_luoc, uu_tien):
+    with get_db() as conn:
+        conn.execute(
+            """UPDATE products SET name=?,link_anh=?,gia_ban=?,danh_muc=?,
+               tinh_trang_kho=?,chien_luoc=?,uu_tien=? WHERE id=?""",
+            (name, link_anh, float(gia_ban or 0), danh_muc,
+             tinh_trang_kho, chien_luoc, str(uu_tien), product_id),
+        )
+
+
+def delete_product(product_id):
+    with get_db() as conn:
+        conn.execute("DELETE FROM products WHERE id=?", (product_id,))
+
+
+def count_product_slots(product_id):
+    """How many active schedule slots reference this product."""
+    with get_db() as conn:
+        return conn.execute(
+            "SELECT COUNT(*) FROM schedule_slots WHERE product_id=?", (product_id,)
+        ).fetchone()[0]
 
 
 def get_all_products():
@@ -436,12 +563,16 @@ def get_schedule(page_id, week_start):
     with get_db() as conn:
         rows = conn.execute(
             """
-            SELECT ss.id, ss.slot_date, ss.slot_order, ss.caption,
-                   ss.media_type, ss.media_value,
-                   p.id AS product_id, p.name, p.link_anh, p.gia_ban,
-                   p.danh_muc, p.tinh_trang_kho, p.chien_luoc, p.uu_tien
+            SELECT ss.id, ss.slot_date, ss.slot_order,
+                   p.id AS product_id, p.ma_vach, p.name, p.link_anh, p.gia_ban,
+                   p.danh_muc, p.tinh_trang_kho, p.chien_luoc, p.uu_tien,
+                   COALESCE(pc.caption, '')    AS caption,
+                   COALESCE(pc.media_type, '') AS media_type,
+                   COALESCE(pc.media_value,'') AS media_value,
+                   COALESCE(pc.post_time, '')  AS post_time
             FROM schedule_slots ss
             JOIN products p ON p.id = ss.product_id
+            LEFT JOIN product_content pc ON pc.ma_vach = p.ma_vach
             WHERE ss.page_id = ? AND ss.slot_date IN ({})
             ORDER BY ss.slot_date, ss.slot_order
             """.format(",".join("?" * 7)),
@@ -517,4 +648,216 @@ def clear_slot_media(slot_id):
         conn.execute(
             "UPDATE schedule_slots SET media_type='', media_value='' WHERE id=?",
             (slot_id,),
+        )
+
+
+def has_week_content(page_id, week_start):
+    """Return True if any slot in this week already has a caption written."""
+    from datetime import date, timedelta
+    start = date.fromisoformat(week_start)
+    dates = [(start + timedelta(days=i)).isoformat() for i in range(7)]
+    with get_db() as conn:
+        row = conn.execute(
+            f"SELECT 1 FROM schedule_slots WHERE page_id=? AND slot_date IN ({','.join('?'*7)}) AND caption != '' LIMIT 1",
+            [page_id] + dates,
+        ).fetchone()
+    return row is not None
+
+
+def replace_slot_product(slot_id, product_id):
+    with get_db() as conn:
+        conn.execute(
+            "UPDATE schedule_slots SET product_id=? WHERE id=?",
+            (product_id, slot_id),
+        )
+
+
+def get_product(product_id):
+    with get_db() as conn:
+        row = conn.execute("SELECT * FROM products WHERE id=?", (product_id,)).fetchone()
+    return dict(row) if row else None
+
+
+# ── Content library ──────────────────────────────────────────────────────────
+
+def get_library_versions(ma_vach):
+    with get_db() as conn:
+        rows = conn.execute(
+            """SELECT cl.*, u.username AS created_by_name
+               FROM content_library cl
+               LEFT JOIN users u ON u.id = cl.created_by
+               WHERE cl.ma_vach = ? ORDER BY cl.created_at DESC""",
+            (ma_vach,),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_library_version(version_id):
+    with get_db() as conn:
+        row = conn.execute("SELECT * FROM content_library WHERE id=?", (version_id,)).fetchone()
+    return dict(row) if row else None
+
+
+def create_library_version(ma_vach, title, caption, media_type, media_value, post_time, user_id):
+    with get_db() as conn:
+        conn.execute(
+            """INSERT INTO content_library
+               (ma_vach, title, caption, media_type, media_value, post_time, created_by)
+               VALUES (?,?,?,?,?,?,?)""",
+            (ma_vach, title, caption, media_type, media_value, post_time, user_id),
+        )
+        return conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+
+
+def update_library_version(version_id, title, caption, media_type, media_value, post_time):
+    with get_db() as conn:
+        conn.execute(
+            """UPDATE content_library
+               SET title=?, caption=?, media_type=?, media_value=?, post_time=?
+               WHERE id=?""",
+            (title, caption, media_type, media_value, post_time, version_id),
+        )
+
+
+def delete_library_version(version_id):
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT media_type, media_value FROM content_library WHERE id=?", (version_id,)
+        ).fetchone()
+        conn.execute("DELETE FROM content_library WHERE id=?", (version_id,))
+    return dict(row) if row else None
+
+
+def get_all_library_products():
+    """Return distinct barcodes that have library content, joined with product info."""
+    with get_db() as conn:
+        rows = conn.execute(
+            """SELECT cl.ma_vach, p.name, p.danh_muc, p.gia_ban, p.link_anh,
+                      COUNT(cl.id) AS version_count,
+                      MAX(cl.created_at) AS last_updated
+               FROM content_library cl
+               LEFT JOIN products p ON p.ma_vach = cl.ma_vach
+               GROUP BY cl.ma_vach
+               ORDER BY last_updated DESC""",
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+# ── Product content (lưu theo barcode) ───────────────────────────────────────
+
+def get_product_content(ma_vach):
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT * FROM product_content WHERE ma_vach=?", (ma_vach,)
+        ).fetchone()
+    return dict(row) if row else None
+
+
+# ── Drive folder cache ───────────────────────────────────────────────────────
+
+def get_drive_folder_id(ma_vach):
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT folder_id FROM drive_folder_cache WHERE ma_vach=?", (ma_vach,)
+        ).fetchone()
+    return row["folder_id"] if row else None
+
+
+def set_drive_folder_id(ma_vach, folder_id):
+    with get_db() as conn:
+        conn.execute(
+            "INSERT INTO drive_folder_cache (ma_vach, folder_id) VALUES (?,?) "
+            "ON CONFLICT(ma_vach) DO UPDATE SET folder_id=excluded.folder_id",
+            (ma_vach, folder_id),
+        )
+
+
+# ── Drive photos ──────────────────────────────────────────────────────────────
+
+def add_drive_photo(ma_vach, folder_id, file_id, filename, url, thumbnail_url, user_id):
+    with get_db() as conn:
+        conn.execute(
+            """INSERT OR IGNORE INTO drive_photos
+               (ma_vach, folder_id, file_id, filename, url, thumbnail_url, uploaded_by)
+               VALUES (?,?,?,?,?,?,?)""",
+            (ma_vach, folder_id, file_id, filename, url, thumbnail_url, user_id),
+        )
+        return conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+
+
+def get_drive_photos(ma_vach):
+    with get_db() as conn:
+        rows = conn.execute(
+            """SELECT dp.*, u.username AS uploader
+               FROM drive_photos dp
+               LEFT JOIN users u ON u.id = dp.uploaded_by
+               WHERE dp.ma_vach=? ORDER BY dp.uploaded_at DESC""",
+            (ma_vach,),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_drive_photo(photo_id):
+    with get_db() as conn:
+        row = conn.execute("SELECT * FROM drive_photos WHERE id=?", (photo_id,)).fetchone()
+    return dict(row) if row else None
+
+
+def delete_drive_photo(photo_id):
+    with get_db() as conn:
+        row = conn.execute("SELECT * FROM drive_photos WHERE id=?", (photo_id,)).fetchone()
+        if row:
+            conn.execute("DELETE FROM drive_photos WHERE id=?", (photo_id,))
+    return dict(row) if row else None
+
+
+# ── Product photos ───────────────────────────────────────────────────────────
+
+def add_product_photo(ma_vach, filename, filepath, user_id):
+    with get_db() as conn:
+        conn.execute(
+            "INSERT INTO product_photos (ma_vach, filename, filepath, uploaded_by) VALUES (?,?,?,?)",
+            (ma_vach, filename, filepath, user_id),
+        )
+        return conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+
+
+def get_product_photos(ma_vach):
+    with get_db() as conn:
+        rows = conn.execute(
+            """SELECT pp.*, u.username AS uploader
+               FROM product_photos pp
+               LEFT JOIN users u ON u.id = pp.uploaded_by
+               WHERE pp.ma_vach = ? ORDER BY pp.uploaded_at DESC""",
+            (ma_vach,),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_product_photo(photo_id):
+    with get_db() as conn:
+        row = conn.execute("SELECT * FROM product_photos WHERE id=?", (photo_id,)).fetchone()
+    return dict(row) if row else None
+
+
+def delete_product_photo(photo_id):
+    with get_db() as conn:
+        row = conn.execute("SELECT * FROM product_photos WHERE id=?", (photo_id,)).fetchone()
+        if row:
+            conn.execute("DELETE FROM product_photos WHERE id=?", (photo_id,))
+    return dict(row) if row else None
+
+
+def save_product_content(ma_vach, caption, media_type, media_value, post_time):
+    with get_db() as conn:
+        conn.execute(
+            """INSERT INTO product_content (ma_vach, caption, media_type, media_value, post_time, updated_at)
+               VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+               ON CONFLICT(ma_vach) DO UPDATE SET
+                   caption=excluded.caption,
+                   media_type=excluded.media_type,
+                   media_value=excluded.media_value,
+                   post_time=excluded.post_time,
+                   updated_at=CURRENT_TIMESTAMP""",
+            (ma_vach, caption, media_type, media_value, post_time),
         )

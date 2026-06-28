@@ -39,10 +39,6 @@
         <a href="{{ url_for('page_setup', page_id=fanpage.id) }}" class="btn btn-light btn-sm fw-semibold">
             <i class="bi bi-sliders me-1"></i>Thiết lập lại
         </a>
-        <a href="{{ url_for('page_content', page_id=fanpage.id, week_start=week_start) }}"
-           class="btn btn-light btn-sm fw-semibold">
-            <i class="bi bi-chat-square-text me-1"></i>Content
-        </a>
     </div>
 </div>
 
@@ -97,7 +93,9 @@
         </div>
 
         {% for slot in slots %}
+        {% set pc = slot.post_time or '' %}
         <div class="slot-card" id="slot-{{ slot.id }}"
+             data-mavach="{{ slot.ma_vach|e }}"
              onclick="selectSlot({{ slot.id }}, '{{ slot.name[:30]|replace("'","\\'")|safe }}')">
             <div class="d-flex align-items-center gap-2">
                 {% if slot.link_anh %}
@@ -107,7 +105,12 @@
                 <div class="slot-thumb-ph"><i class="bi bi-image text-muted small"></i></div>
                 {% endif %}
                 <div class="flex-grow-1 overflow-hidden">
-                    <div class="small fw-semibold text-truncate" title="{{ slot.name }}">{{ slot.name[:35] }}</div>
+                    <div class="small fw-semibold text-truncate slot-name content-trigger"
+                         title="Nhấn để nhập content"
+                         style="cursor:pointer; color:#1877f2; text-decoration:underline dotted;"
+                         onclick="event.stopPropagation(); openContent(this)">
+                        {{ slot.name[:35] }}
+                    </div>
                     <div class="d-flex align-items-center gap-1 mt-1 flex-wrap">
                         <span class="badge small px-1
                             {% if slot.chien_luoc == 'mass' %}badge-chien-luoc-mass
@@ -116,12 +119,23 @@
                             {% else %}badge-chien-luoc-order{% endif %}">
                             {{ slot.chien_luoc }}
                         </span>
-                        <span class="text-muted" style="font-size:11px;">{{ "{:,.0f}".format(slot.gia_ban) }}đ</span>
+                        <span class="text-muted slot-price" style="font-size:11px;">{{ "{:,.0f}".format(slot.gia_ban) }}đ</span>
                     </div>
-                    {% if slot.caption %}
-                    <i class="bi bi-check-circle-fill text-success small"></i>
-                    {% endif %}
+                    <div class="content-status mt-1" style="font-size:10px;">
+                        {% if slot.post_time %}
+                        <span class="text-success"><i class="bi bi-check-circle-fill"></i> {{ slot.post_time }}</span>
+                        {% elif slot.caption %}
+                        <span class="text-success"><i class="bi bi-check-circle-fill"></i> Có content</span>
+                        {% endif %}
+                    </div>
                 </div>
+            </div>
+            <div class="mt-1 text-end">
+                <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-1 btn-replace"
+                        style="font-size:10px;"
+                        onclick="event.stopPropagation(); openReplace({{ slot.id }}, '{{ slot.name[:40]|replace("'","\\'")|safe }}')">
+                    <i class="bi bi-arrow-repeat"></i> Thay SP
+                </button>
             </div>
         </div>
         {% else %}
@@ -134,9 +148,182 @@
 
 <p class="text-muted small mt-3">
     <i class="bi bi-info-circle me-1"></i>
-    Click 1 sản phẩm → click sản phẩm thứ 2 để hoán đổi vị trí giữa 2 ngày bất kỳ.
+    Click 1 sản phẩm → click sản phẩm thứ 2 để hoán đổi. Nhấn <strong>Thay SP</strong> để chọn sản phẩm thay thế.
 </p>
 {% endif %}
+
+
+<!-- Modal content -->
+<div class="modal fade" id="contentModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div>
+                    <h5 class="modal-title"><i class="bi bi-pencil-square me-2"></i>Content</h5>
+                    <div class="small text-muted fw-semibold" id="contentModalProductName"></div>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-0">
+                <input type="hidden" id="contentMaVach">
+
+                <!-- Tab nav -->
+                <ul class="nav nav-tabs px-3 pt-2" id="contentTabs">
+                    <li class="nav-item">
+                        <button class="nav-link active" id="tab-library-btn"
+                                onclick="switchTab('library')">
+                            <i class="bi bi-journal-richtext me-1"></i>Thư viện
+                            <span class="badge bg-secondary ms-1" id="libraryCountBadge">0</span>
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link" id="tab-new-btn"
+                                onclick="switchTab('new')">
+                            <i class="bi bi-plus-lg me-1"></i>Tạo mới / Sửa
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link" id="tab-photos-btn"
+                                onclick="switchTab('photos')">
+                            <i class="bi bi-images me-1"></i>Kho ảnh
+                        </button>
+                    </li>
+                </ul>
+
+                <!-- Tab: thư viện -->
+                <div id="tab-library" class="p-3">
+                    <div id="libraryVersionsList">
+                        <div class="text-center py-4 text-muted">
+                            <span class="spinner-border spinner-border-sm me-1"></span>Đang tải...
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tab: kho ảnh Drive -->
+                <div id="tab-photos" class="p-3 d-none">
+                    <div id="drivePhotosNotConfigured" class="alert alert-warning d-none py-2 small">
+                        <i class="bi bi-exclamation-triangle me-1"></i>
+                        Google Drive chưa được cấu hình. Liên hệ admin.
+                    </div>
+                    <div class="mb-3 d-flex gap-2 flex-wrap align-items-center">
+                        <input type="file" id="schedulePhotoInput" class="form-control form-control-sm flex-fill"
+                               accept="image/*" multiple style="max-width:320px">
+                        <button class="btn btn-sm btn-outline-primary text-nowrap" onclick="uploadSchedulePhotos()">
+                            <i class="bi bi-cloud-upload me-1"></i>Upload
+                        </button>
+                        <div id="schedulePhotoProgress" class="d-none w-100">
+                            <div class="progress" style="height:4px">
+                                <div id="schedulePhotoBar" class="progress-bar progress-bar-animated" style="width:0%"></div>
+                            </div>
+                            <small class="text-muted" id="schedulePhotoText"></small>
+                        </div>
+                    </div>
+                    <div id="drivePhotoGrid" class="row g-2"></div>
+                    <div id="drivePhotoEmpty" class="text-center text-muted py-4 d-none">
+                        <i class="bi bi-cloud-upload fs-3 d-block mb-1"></i>Chưa có ảnh nào cho sản phẩm này.
+                    </div>
+                </div>
+
+                <!-- Tab: tạo mới / sửa -->
+                <div id="tab-new" class="p-3 d-none">
+                    <input type="hidden" id="editingVersionId">
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-5">
+                            <label class="form-label small fw-semibold">Tên phiên bản</label>
+                            <input type="text" class="form-control" id="contentTitle"
+                                   placeholder="VD: Phiên bản Tết...">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small fw-semibold">Giờ đăng</label>
+                            <input type="time" class="form-control" id="contentPostTime">
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Caption</label>
+                        <textarea class="form-control" id="contentCaption" rows="6"
+                                  placeholder="Nhập nội dung bài đăng..."></textarea>
+                        <div class="d-flex justify-content-between mt-1">
+                            <span class="form-text" id="captionCount">0 ký tự</span>
+                            <button type="button" class="btn btn-sm btn-link p-0"
+                                    onclick="navigator.clipboard.writeText(document.getElementById('contentCaption').value)">
+                                <i class="bi bi-clipboard me-1"></i>Copy
+                            </button>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Ảnh</label>
+                        <div id="contentImgPreview" class="mb-2 d-none">
+                            <img id="contentImgEl" src="" style="max-height:140px;border-radius:8px;object-fit:cover;" alt="">
+                            <button type="button" class="btn btn-sm btn-danger ms-2"
+                                    onclick="removeContentImg()"><i class="bi bi-trash"></i></button>
+                        </div>
+                        <input type="file" class="form-control form-control-sm" id="contentImgFile"
+                               accept=".jpg,.jpeg,.png,.gif,.webp">
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small fw-semibold">Link video</label>
+                        <input type="url" class="form-control" id="contentVideoUrl" placeholder="https://...">
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                <button type="button" class="btn btn-primary d-none" id="saveContentBtn" onclick="saveContentVersion()">
+                    <i class="bi bi-floppy me-1"></i>Lưu vào thư viện
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal chọn sản phẩm thay thế -->
+<div class="modal fade" id="replaceModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div>
+                    <h5 class="modal-title"><i class="bi bi-arrow-repeat me-2"></i>Thay sản phẩm</h5>
+                    <div class="small text-muted" id="replaceSlotName"></div>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="text" class="form-control mb-3" id="productSearch"
+                       placeholder="Tìm theo tên, danh mục, mã vạch...">
+                <div id="productList">
+                    {% for p in all_products %}
+                    <div class="product-row d-flex align-items-center gap-3 p-2 rounded mb-1"
+                         style="cursor:pointer; border:1px solid #e9ecef;"
+                         data-search="{{ (p.name ~ ' ' ~ (p.danh_muc or '') ~ ' ' ~ (p.ma_vach or ''))|lower|e }}"
+                         data-id="{{ p.id }}"
+                         data-name="{{ p.name|e }}"
+                         data-img="{{ (p.link_anh or '')|e }}"
+                         data-gia="{{ p.gia_ban }}"
+                         onclick="confirmReplace(this)">
+                        {% if p.link_anh %}
+                        <img src="{{ p.link_anh }}" style="width:40px;height:40px;object-fit:cover;border-radius:6px;flex-shrink:0"
+                             onerror="this.style.display='none'" alt="">
+                        {% else %}
+                        <div style="width:40px;height:40px;background:#f0f0f0;border-radius:6px;flex-shrink:0;display:flex;align-items:center;justify-content:center;">
+                            <i class="bi bi-image text-muted small"></i>
+                        </div>
+                        {% endif %}
+                        <div class="flex-grow-1 overflow-hidden">
+                            <div class="small fw-semibold text-truncate">{{ p.name }}</div>
+                            <div class="d-flex gap-2 mt-1 flex-wrap">
+                                <span class="badge bg-secondary" style="font-size:10px;">{{ p.danh_muc }}</span>
+                                <span class="badge bg-light text-dark border" style="font-size:10px;">{{ p.chien_luoc }}</span>
+                                <span class="text-muted" style="font-size:11px;">{{ "{:,.0f}".format(p.gia_ban) }}đ</span>
+                            </div>
+                        </div>
+                        <i class="bi bi-chevron-right text-muted"></i>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
@@ -168,5 +355,382 @@ function clearSwap() {
     selectedSlotName = null;
     document.getElementById('swapBar').classList.add('d-none');
 }
+
+// ── Content popup ─────────────────────────────────────────────────────────────
+let contentModal = null;
+let contentHasNewImg = false;
+let contentRemoveImg = false;
+let currentMaVach = null;
+
+function escHtml(s) {
+    return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function openContent(el) {
+    const card = el.closest('.slot-card');
+    currentMaVach = card.dataset.mavach;
+    document.getElementById('contentMaVach').value = currentMaVach;
+    document.getElementById('contentModalProductName').textContent = el.textContent.trim();
+    resetNewForm();
+    switchTab('library');
+    if (!contentModal) contentModal = new bootstrap.Modal(document.getElementById('contentModal'));
+    contentModal.show();
+    loadLibraryVersions(currentMaVach);
+}
+
+function switchTab(tab) {
+    ['library','new','photos'].forEach(t => {
+        document.getElementById(`tab-${t}`).classList.toggle('d-none', t !== tab);
+        document.getElementById(`tab-${t}-btn`).classList.toggle('active', t === tab);
+    });
+    document.getElementById('saveContentBtn').classList.toggle('d-none', tab !== 'new');
+    if (tab === 'photos') loadScheduleDrivePhotos(currentMaVach);
+}
+
+// ── Kho ảnh Drive (schedule page) ────────────────────────────────────────────
+function loadScheduleDrivePhotos(maVach) {
+    if (!maVach) return;
+    const grid  = document.getElementById('drivePhotoGrid');
+    const empty = document.getElementById('drivePhotoEmpty');
+    grid.innerHTML = '<div class="col-12 text-center py-3 text-muted"><span class="spinner-border spinner-border-sm me-1"></span>Đang tải…</div>';
+    empty.classList.add('d-none');
+
+    fetch(`/api/drive/photos/${encodeURIComponent(maVach)}`)
+        .then(r => r.json())
+        .then(data => {
+            document.getElementById('drivePhotosNotConfigured').classList.toggle('d-none', data.configured !== false);
+            const photos = data.photos || [];
+            grid.innerHTML = '';
+            if (!photos.length) { empty.classList.remove('d-none'); return; }
+            photos.forEach(ph => {
+                const col = document.createElement('div');
+                col.className = 'col-4 col-md-3';
+                col.innerHTML = `
+                    <div class="card border h-100" style="cursor:pointer" title="Nhấn để dùng ảnh này"
+                         onclick="useSchedulePhoto('${ph.url}','${escHtml2(ph.filename)}')">
+                        <div class="ratio ratio-1x1">
+                            <img src="${ph.thumbnail_url || ph.url}" class="object-fit-cover rounded-top"
+                                 style="width:100%;height:100%" onerror="this.src='${ph.url}'">
+                        </div>
+                        <div class="card-body p-1">
+                            <div class="x-small text-muted text-truncate" style="font-size:.7rem">${escHtml2(ph.filename)}</div>
+                        </div>
+                    </div>`;
+                grid.appendChild(col);
+            });
+        });
+}
+
+function useSchedulePhoto(url, filename) {
+    // Set as image in the new/edit content form then switch to tab
+    const imgEl      = document.getElementById('contentImgEl');
+    const preview    = document.getElementById('contentImgPreview');
+    imgEl.src        = url;
+    preview.classList.remove('d-none');
+    // Store Drive URL as the media value (will be saved as video URL field trick or caption note)
+    document.getElementById('contentVideoUrl').value = '';
+    // Flag that we are using a Drive image URL (not a local upload)
+    window._drivePhotoUrl = url;
+    window._drivePhotoName = filename;
+    contentHasNewImg = false; // not a file upload
+    switchTab('new');
+}
+
+function uploadSchedulePhotos() {
+    const files = document.getElementById('schedulePhotoInput').files;
+    if (!files.length || !currentMaVach) return;
+    const prog = document.getElementById('schedulePhotoProgress');
+    const bar  = document.getElementById('schedulePhotoBar');
+    const txt  = document.getElementById('schedulePhotoText');
+    prog.classList.remove('d-none');
+    const all = Array.from(files);
+    let done = 0;
+
+    const next = () => {
+        if (done >= all.length) {
+            prog.classList.add('d-none');
+            bar.style.width = '0%';
+            document.getElementById('schedulePhotoInput').value = '';
+            loadScheduleDrivePhotos(currentMaVach);
+            return;
+        }
+        const file = all[done];
+        txt.textContent = `${done+1}/${all.length}: ${file.name}`;
+        bar.style.width = `${Math.round(done/all.length*100)}%`;
+        const fd = new FormData();
+        fd.append('ma_vach', currentMaVach);
+        fd.append('photos', file);
+        fetch('/api/drive/photos', { method:'POST', body:fd })
+            .then(r=>r.json())
+            .then(()=>{ done++; next(); })
+            .catch(()=>{ done++; next(); });
+    };
+    next();
+}
+
+function escHtml2(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+function loadLibraryVersions(maVach) {
+    const el = document.getElementById('libraryVersionsList');
+    el.innerHTML = '<div class="text-center py-4 text-muted"><span class="spinner-border spinner-border-sm me-1"></span>Đang tải...</div>';
+    fetch('/api/library/' + encodeURIComponent(maVach))
+        .then(r => r.json())
+        .then(versions => {
+            document.getElementById('libraryCountBadge').textContent = versions.length;
+            if (!versions.length) {
+                el.innerHTML = '<div class="text-center py-4 text-muted"><i class="bi bi-journal-x d-block fs-3 mb-2"></i>Chưa có phiên bản nào.<br><button class="btn btn-primary btn-sm mt-2" onclick="switchTab(\'new\')"><i class="bi bi-plus-lg me-1"></i>Tạo phiên bản đầu tiên</button></div>';
+                return;
+            }
+            el.innerHTML = versions.map(v => renderLibCard(v)).join('');
+        });
+}
+
+function renderLibCard(v) {
+    const imgHtml = v.media_type === 'image' && v.media_value
+        ? `<img src="/static/${v.media_value}" style="width:52px;height:52px;object-fit:cover;border-radius:6px;flex-shrink:0" onerror="this.style.display='none'" alt="">`
+        : `<div style="width:52px;height:52px;background:#f0f0f0;border-radius:6px;flex-shrink:0;display:flex;align-items:center;justify-content:center;"><i class="bi bi-image text-muted"></i></div>`;
+    const timeHtml = v.post_time ? `<span class="badge bg-light text-dark border me-1"><i class="bi bi-clock me-1"></i>${escHtml(v.post_time)}</span>` : '';
+    const titleHtml = v.title ? `<strong>${escHtml(v.title)}</strong> · ` : '';
+    const captionPrev = escHtml((v.caption||'').substring(0,120)) + ((v.caption||'').length > 120 ? '...' : '');
+    return `<div class="d-flex gap-3 p-2 mb-2 rounded border" style="background:#fafafa;" id="libvc-${v.id}">
+        ${imgHtml}
+        <div class="flex-grow-1 overflow-hidden">
+            <div class="small mb-1">${titleHtml}${timeHtml}<span class="text-muted" style="font-size:11px;">${(v.created_at||'').slice(0,10)}</span></div>
+            <div class="small text-muted" style="white-space:pre-wrap;max-height:60px;overflow:hidden;">${captionPrev||'<em>(Chưa có caption)</em>'}</div>
+        </div>
+        <div class="d-flex flex-column gap-1 flex-shrink-0">
+            <button class="btn btn-primary btn-sm" onclick="applyVersion(${v.id})" title="Áp dụng">
+                <i class="bi bi-check-lg"></i> Dùng
+            </button>
+            <button class="btn btn-outline-secondary btn-sm" onclick="editVersion(${v.id})" title="Sửa">
+                <i class="bi bi-pencil"></i>
+            </button>
+            <button class="btn btn-outline-danger btn-sm" onclick="deleteLibVersion(${v.id})" title="Xóa">
+                <i class="bi bi-trash"></i>
+            </button>
+        </div>
+    </div>`;
+}
+
+function applyVersion(versionId) {
+    fetch(`/api/library/${versionId}/apply`, { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            if (!data.ok) { alert('Lỗi: ' + (data.error||'?')); return; }
+            updateCardIndicator(currentMaVach, data.version.post_time, data.version.caption);
+            contentModal.hide();
+        });
+}
+
+function editVersion(versionId) {
+    fetch('/api/library/version/' + versionId)
+        .then(r => r.json())
+        .then(v => {
+            document.getElementById('editingVersionId').value = v.id;
+            document.getElementById('contentTitle').value = v.title || '';
+            document.getElementById('contentPostTime').value = v.post_time || '';
+            document.getElementById('contentCaption').value = v.caption || '';
+            document.getElementById('contentVideoUrl').value = v.media_type === 'video' ? (v.media_value||'') : '';
+            document.getElementById('contentImgFile').value = '';
+            if (v.media_type === 'image' && v.media_value) {
+                document.getElementById('contentImgEl').src = '/static/' + v.media_value;
+                document.getElementById('contentImgPreview').classList.remove('d-none');
+            } else {
+                document.getElementById('contentImgPreview').classList.add('d-none');
+            }
+            contentHasNewImg = false; contentRemoveImg = false;
+            updateCaptionCount();
+            document.getElementById('saveContentBtn').textContent = '';
+            document.getElementById('saveContentBtn').innerHTML = '<i class="bi bi-floppy me-1"></i>Lưu chỉnh sửa';
+            switchTab('new');
+        });
+}
+
+function deleteLibVersion(versionId) {
+    if (!confirm('Xóa phiên bản này?')) return;
+    fetch(`/api/library/${versionId}/delete`, { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            if (data.ok) {
+                document.getElementById('libvc-' + versionId).remove();
+                const count = document.querySelectorAll('#libraryVersionsList [id^="libvc-"]').length;
+                document.getElementById('libraryCountBadge').textContent = count;
+            }
+        });
+}
+
+function resetNewForm() {
+    document.getElementById('editingVersionId').value = '';
+    document.getElementById('contentTitle').value = '';
+    document.getElementById('contentCaption').value = '';
+    document.getElementById('contentPostTime').value = '';
+    document.getElementById('contentVideoUrl').value = '';
+    document.getElementById('contentImgFile').value = '';
+    document.getElementById('contentImgPreview').classList.add('d-none');
+    document.getElementById('captionCount').textContent = '0 ký tự';
+    document.getElementById('saveContentBtn').innerHTML = '<i class="bi bi-floppy me-1"></i>Lưu vào thư viện';
+    contentHasNewImg = false; contentRemoveImg = false;
+    window._drivePhotoUrl = '';
+}
+
+function updateCaptionCount() {
+    const len = document.getElementById('contentCaption').value.length;
+    document.getElementById('captionCount').textContent = len.toLocaleString('vi-VN') + ' ký tự';
+}
+
+function removeContentImg() {
+    document.getElementById('contentImgEl').src = '';
+    document.getElementById('contentImgPreview').classList.add('d-none');
+    document.getElementById('contentImgFile').value = '';
+    contentRemoveImg = true; contentHasNewImg = false;
+    window._drivePhotoUrl = '';
+}
+
+document.getElementById('contentCaption').addEventListener('input', updateCaptionCount);
+document.getElementById('contentImgFile').addEventListener('change', function() {
+    if (this.files && this.files[0]) {
+        const reader = new FileReader();
+        reader.onload = e => {
+            document.getElementById('contentImgEl').src = e.target.result;
+            document.getElementById('contentImgPreview').classList.remove('d-none');
+            contentHasNewImg = true; contentRemoveImg = false;
+        };
+        reader.readAsDataURL(this.files[0]);
+        window._drivePhotoUrl = ''; // local file overrides Drive photo
+    }
+});
+
+function saveContentVersion() {
+    const maVach = currentMaVach;
+    const versionId = document.getElementById('editingVersionId').value;
+    const btn = document.getElementById('saveContentBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Đang lưu...';
+    const fd = new FormData();
+    fd.append('ma_vach',   maVach);
+    fd.append('title',     document.getElementById('contentTitle').value);
+    fd.append('caption',   document.getElementById('contentCaption').value);
+    fd.append('post_time', document.getElementById('contentPostTime').value);
+    fd.append('remove_media', contentRemoveImg ? '1' : '0');
+    // Drive photo: use URL as video_url with media_type override handled server-side via drive_url field
+    const driveUrl = window._drivePhotoUrl || '';
+    const videoUrl = document.getElementById('contentVideoUrl').value;
+    if (driveUrl && !contentHasNewImg && !videoUrl) {
+        fd.append('drive_image_url', driveUrl);
+    } else {
+        fd.append('video_url', videoUrl);
+    }
+    if (contentHasNewImg) fd.append('image_file', document.getElementById('contentImgFile').files[0]);
+    const url = versionId ? `/api/library/${versionId}` : '/api/library';
+    fetch(url, { method: 'POST', body: fd })
+        .then(r => r.json())
+        .then(data => {
+            if (!data.ok) { alert('Lỗi: ' + (data.error||'?')); return; }
+            resetNewForm();
+            switchTab('library');
+            loadLibraryVersions(maVach);
+        })
+        .catch(() => alert('Lỗi kết nối.'))
+        .finally(() => {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-floppy me-1"></i>Lưu vào thư viện';
+        });
+}
+
+function updateCardIndicator(maVach, postTime, caption) {
+    document.querySelectorAll(`.slot-card[data-mavach="${CSS.escape(maVach)}"]`).forEach(card => {
+        const status = card.querySelector('.content-status');
+        if (!status) return;
+        if (postTime) {
+            status.innerHTML = `<span class="text-success"><i class="bi bi-check-circle-fill"></i> ${escHtml(postTime)}</span>`;
+        } else if (caption) {
+            status.innerHTML = '<span class="text-success"><i class="bi bi-check-circle-fill"></i> Có content</span>';
+        } else {
+            status.innerHTML = '';
+        }
+    });
+}
+
+// ── Thay sản phẩm ────────────────────────────────────────────────────────────
+let replaceModal = null;
+let activeSlotId = null;
+
+function openReplace(slotId, slotName) {
+    activeSlotId = slotId;
+    document.getElementById('replaceSlotName').textContent = 'Slot hiện tại: ' + slotName;
+    document.getElementById('productSearch').value = '';
+    filterProducts('');
+    if (!replaceModal) replaceModal = new bootstrap.Modal(document.getElementById('replaceModal'));
+    replaceModal.show();
+}
+
+function confirmReplace(el) {
+    const productId = parseInt(el.dataset.id);
+    const productName = el.dataset.name;
+    const productImg = el.dataset.img;
+    const productPrice = parseFloat(el.dataset.gia);
+
+    fetch('{{ url_for("schedule_replace", page_id=fanpage.id) }}', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({slot_id: activeSlotId, product_id: productId})
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (!data.ok) { alert('Lỗi: ' + (data.error || 'Không xác định')); return; }
+        const card = document.getElementById('slot-' + activeSlotId);
+        card.querySelector('.slot-name').textContent = productName.substring(0, 35);
+        card.querySelector('.slot-name').title = productName;
+        card.querySelector('.slot-price').textContent = new Intl.NumberFormat('vi-VN').format(productPrice) + 'đ';
+        if (productImg) {
+            const img = card.querySelector('.slot-thumb');
+            const ph = card.querySelector('.slot-thumb-ph');
+            if (img) { img.src = productImg; }
+            else if (ph) { ph.outerHTML = `<img src="${productImg}" class="slot-thumb" onerror="this.style.display='none'" alt="">`; }
+        }
+        // Cập nhật barcode mới để click tên SP load đúng content
+        const newMaVach = data.product ? data.product.ma_vach : null;
+        if (newMaVach != null) {
+            card.dataset.mavach = newMaVach;
+        }
+        replaceModal.hide();
+        // Load content của SP mới và cập nhật indicator ngay
+        const status = card.querySelector('.content-status');
+        if (status && newMaVach) {
+            fetch('/api/product-content/' + encodeURIComponent(newMaVach))
+                .then(r => r.json())
+                .then(pc => {
+                    if (pc.post_time) {
+                        status.innerHTML = '<span class="text-success"><i class="bi bi-check-circle-fill"></i> ' + pc.post_time + '</span>';
+                    } else if (pc.caption) {
+                        status.innerHTML = '<span class="text-success"><i class="bi bi-check-circle-fill"></i> Có content</span>';
+                    } else {
+                        status.innerHTML = '';
+                    }
+                });
+        } else if (status) {
+            status.innerHTML = '';
+        }
+    })
+    .catch(() => alert('Không thể kết nối server. Thử lại.'));
+}
+
+document.getElementById('productSearch').addEventListener('input', function() {
+    filterProducts(this.value.toLowerCase());
+});
+
+function filterProducts(q) {
+    document.querySelectorAll('.product-row').forEach(row => {
+        row.style.display = (!q || row.dataset.search.includes(q)) ? '' : 'none';
+    });
+}
+
+// Hover effect cho product rows
+document.querySelectorAll('.product-row').forEach(row => {
+    row.addEventListener('mouseenter', () => row.style.background = '#f0f4ff');
+    row.addEventListener('mouseleave', () => row.style.background = '');
+});
 </script>
 {% endblock %}

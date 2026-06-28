@@ -1,0 +1,468 @@
+{% extends "base.html" %}
+{% block title %}Quản lý sản phẩm – {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="page-hero mb-4">
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+        <div>
+            <h1 class="h3 fw-bold mb-1"><i class="bi bi-box-seam me-2"></i>Quản lý sản phẩm</h1>
+            <p class="mb-0 opacity-90">{{ products|length }} sản phẩm hiển thị</p>
+        </div>
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addModal">
+            <i class="bi bi-plus-lg me-1"></i>Thêm sản phẩm
+        </button>
+    </div>
+</div>
+
+<!-- Bộ lọc tìm kiếm -->
+<form method="GET" class="card border-0 shadow-sm mb-4">
+    <div class="card-body p-3">
+        <div class="row g-2 align-items-end">
+            <div class="col-md-5">
+                <input type="text" name="q" class="form-control" placeholder="Tìm theo tên hoặc mã vạch…"
+                       value="{{ q }}">
+            </div>
+            <div class="col-md-3">
+                <select name="cat" class="form-select">
+                    <option value="">-- Tất cả danh mục --</option>
+                    {% for c in categories %}
+                    <option value="{{ c }}" {% if cat_f == c %}selected{% endif %}>{{ c }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <select name="type" class="form-select">
+                    <option value="">-- Tất cả loại --</option>
+                    <option value="mass"     {% if type_f == 'mass'     %}selected{% endif %}>Mass</option>
+                    <option value="thanh ly" {% if type_f == 'thanh ly' %}selected{% endif %}>Thanh lý</option>
+                    <option value="mo ban"   {% if type_f == 'mo ban'   %}selected{% endif %}>Mở bán</option>
+                    <option value="order"    {% if type_f == 'order'    %}selected{% endif %}>Order</option>
+                </select>
+            </div>
+            <div class="col-md-2 d-flex gap-2">
+                <button type="submit" class="btn btn-outline-primary flex-fill">
+                    <i class="bi bi-search"></i>
+                </button>
+                <a href="{{ url_for('products_list') }}" class="btn btn-outline-secondary flex-fill">
+                    <i class="bi bi-x-lg"></i>
+                </a>
+            </div>
+        </div>
+    </div>
+</form>
+
+<!-- Bảng sản phẩm -->
+<div class="card border-0 shadow-sm">
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th style="width:130px">Mã vạch</th>
+                    <th>Tên sản phẩm</th>
+                    <th style="width:110px">Danh mục</th>
+                    <th style="width:105px">Loại hàng</th>
+                    <th style="width:105px">Giá bán</th>
+                    <th style="width:85px">Kho</th>
+                    <th style="width:70px" class="text-center">Ưu tiên</th>
+                    <th style="width:130px" class="text-end">Thao tác</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for p in products %}
+            <tr>
+                <td>
+                    <code class="small">{{ p.ma_vach or '—' }}</code>
+                </td>
+                <td>
+                    <div class="fw-semibold">{{ p.name }}</div>
+                    {% if p.link_anh %}
+                    <a href="{{ p.link_anh }}" target="_blank" class="small text-muted text-decoration-none">
+                        <i class="bi bi-image me-1"></i>Xem ảnh
+                    </a>
+                    {% endif %}
+                </td>
+                <td><span class="badge bg-light text-dark border">{{ p.danh_muc or '—' }}</span></td>
+                <td>
+                    {% if p.chien_luoc == 'mass' %}
+                        <span class="badge bg-success-subtle text-success-emphasis">Mass</span>
+                    {% elif p.chien_luoc == 'thanh ly' %}
+                        <span class="badge bg-warning-subtle text-warning-emphasis">Thanh lý</span>
+                    {% elif p.chien_luoc == 'mo ban' %}
+                        <span class="badge bg-info-subtle text-info-emphasis">Mở bán</span>
+                    {% elif p.chien_luoc == 'order' %}
+                        <span class="badge bg-secondary-subtle text-secondary-emphasis">Order</span>
+                    {% else %}
+                        <span class="badge bg-light text-dark">{{ p.chien_luoc }}</span>
+                    {% endif %}
+                </td>
+                <td class="fw-semibold">{{ "{:,.0f}".format(p.gia_ban or 0) }}đ</td>
+                <td>
+                    {% if p.tinh_trang_kho == 'san' %}
+                        <span class="badge bg-success-subtle text-success-emphasis">Sẵn</span>
+                    {% else %}
+                        <span class="badge bg-secondary-subtle text-secondary-emphasis">Order</span>
+                    {% endif %}
+                </td>
+                <td class="text-center">
+                    {% if p.uu_tien == '1' or p.uu_tien == 1 %}
+                        <span class="badge bg-danger-subtle text-danger-emphasis">1</span>
+                    {% elif p.uu_tien == '3' or p.uu_tien == 3 %}
+                        <span class="badge bg-light text-muted border">3</span>
+                    {% else %}
+                        <span class="badge bg-primary-subtle text-primary-emphasis">2</span>
+                    {% endif %}
+                </td>
+                <td class="text-end">
+                    <div class="d-flex gap-1 justify-content-end">
+                        {% if p.ma_vach %}
+                        <a href="{{ url_for('content_library') }}?q={{ p.ma_vach|urlencode }}"
+                           class="btn btn-sm btn-outline-secondary" title="Xem content">
+                            <i class="bi bi-journal-richtext"></i>
+                        </a>
+                        {% endif %}
+                        <button class="btn btn-sm btn-outline-success" title="Kho ảnh"
+                                data-id="{{ p.id }}" data-name="{{ p.name|e }}" data-mavach="{{ p.ma_vach|e }}"
+                                onclick="openPhoto(this)">
+                            <i class="bi bi-images"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-primary" title="Sửa"
+                                data-p='{{ p|tojson }}'
+                                onclick="openEdit(JSON.parse(this.dataset.p))">
+                            <i class="bi bi-pencil"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger" title="Xóa"
+                                data-id="{{ p.id }}" data-name="{{ p.name|e }}" data-mavach="{{ p.ma_vach|e }}"
+                                onclick="openDelete(this)">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </div>
+                </td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="8" class="text-center text-muted py-5">
+                    <i class="bi bi-inbox fs-2 d-block mb-2"></i>
+                    Không có sản phẩm nào.
+                    {% if q or cat_f or type_f %}Thử xóa bộ lọc.{% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Modal Thêm sản phẩm -->
+<div class="modal fade" id="addModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form method="POST" action="{{ url_for('product_add') }}">
+            <div class="modal-header">
+                <h5 class="modal-title fw-bold"><i class="bi bi-plus-circle me-2"></i>Thêm sản phẩm mới</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold">Mã vạch <span class="text-danger">*</span></label>
+                    <input type="text" name="ma_vach" class="form-control" required placeholder="VD: SP001">
+                </div>
+                {% include '_product_fields.html' %}
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Hủy</button>
+                <button type="submit" class="btn btn-primary fw-semibold">
+                    <i class="bi bi-plus-lg me-1"></i>Thêm sản phẩm
+                </button>
+            </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Sửa sản phẩm -->
+<div class="modal fade" id="editModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST" id="editForm" action="#">
+            <div class="modal-header">
+                <div>
+                    <h5 class="modal-title fw-bold"><i class="bi bi-pencil me-2"></i>Sửa sản phẩm</h5>
+                    <small class="text-muted">Mã vạch: <code id="editMaVach"></code></small>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold">Loại hàng</label>
+                    <select name="chien_luoc" id="editChienLuoc" class="form-select">
+                        <option value="mass">Mass</option>
+                        <option value="thanh ly">Thanh lý</option>
+                        <option value="mo ban">Mở bán</option>
+                        <option value="order">Order</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold">Tình trạng kho</label>
+                    <select name="tinh_trang_kho" id="editTinhTrang" class="form-select">
+                        <option value="san">Sẵn hàng</option>
+                        <option value="order">Order</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold">Mức độ ưu tiên</label>
+                    <select name="uu_tien" id="editUuTien" class="form-select">
+                        <option value="1">1 — Cao nhất</option>
+                        <option value="2">2 — Trung bình</option>
+                        <option value="3">3 — Thấp nhất</option>
+                    </select>
+                </div>
+                <div class="alert alert-info py-2 small mb-0">
+                    <i class="bi bi-info-circle me-1"></i>
+                    Thay đổi ở đây không ảnh hưởng đến lịch đăng đang chạy của nhân viên.
+                    Lịch tuần tới sẽ dùng thông tin mới.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Hủy</button>
+                <button type="submit" class="btn btn-primary fw-semibold">
+                    <i class="bi bi-check-lg me-1"></i>Lưu thay đổi
+                </button>
+            </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal xác nhận xóa -->
+<div class="modal fade" id="deleteModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST" id="deleteForm">
+                <input type="hidden" name="confirm_delete" value="1">
+            <div class="modal-header">
+                <h5 class="modal-title fw-bold text-danger"><i class="bi bi-trash me-2"></i>Xóa sản phẩm</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Bạn chắc chắn muốn xóa sản phẩm <strong id="deleteName"></strong>?</p>
+                <p class="small text-muted">Mã vạch: <code id="deleteMaVach"></code></p>
+                <div class="alert alert-warning py-2 small">
+                    <i class="bi bi-exclamation-triangle me-1"></i>
+                    Nếu sản phẩm đang có trong lịch đăng của nhân viên, các slot đó cũng sẽ bị xóa theo.
+                    Content đã viết theo barcode vẫn được giữ lại.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Hủy</button>
+                <button type="submit" class="btn btn-danger fw-semibold">
+                    <i class="bi bi-trash me-1"></i>Xóa sản phẩm
+                </button>
+            </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Kho ảnh (Drive) -->
+<div class="modal fade" id="photoModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div>
+                    <h5 class="modal-title fw-bold">
+                        <i class="bi bi-images me-2"></i>Kho ảnh Drive —
+                        <span id="photoProductName"></span>
+                    </h5>
+                    <small class="text-muted">Mã vạch: <code id="photoMaVach"></code></small>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="driveNotConfigured" class="alert alert-warning d-none">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    Google Drive chưa được cấu hình. Liên hệ admin để thiết lập biến môi trường
+                    <code>GOOGLE_SERVICE_ACCOUNT_JSON</code> và <code>DRIVE_PARENT_FOLDER_ID</code>.
+                </div>
+                <div id="driveReady">
+                    <div id="driveFolderBanner" class="alert alert-info py-2 small d-none mb-3"></div>
+                    <div id="photoGrid" class="row g-2"></div>
+                    <div id="photoEmpty" class="text-center text-muted py-5 d-none">
+                        <i class="bi bi-folder2 fs-2 d-block mb-2"></i>
+                        Chưa có ảnh. Tạo folder trong Drive đặt tên bắt đầu bằng mã vạch, thêm ảnh vào đó rồi mở lại.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Lightbox -->
+<div class="modal fade" id="lightboxModal" tabindex="-1">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
+        <div class="modal-content bg-dark border-0">
+            <div class="modal-header border-0 pb-0">
+                <small class="text-white-50" id="lightboxName"></small>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body text-center p-2">
+                <img id="lightboxImg" src="" class="img-fluid rounded" style="max-height:80vh">
+            </div>
+            <div class="modal-footer border-0 pt-0 justify-content-between">
+                <a id="lightboxLink" href="#" target="_blank" class="btn btn-sm btn-outline-light">
+                    <i class="bi bi-box-arrow-up-right me-1"></i>Mở Drive
+                </a>
+                <button onclick="deletePhoto(currentPhotoDbId)" class="btn btn-sm btn-outline-danger">
+                    <i class="bi bi-trash me-1"></i>Xóa ảnh
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// ── Sửa / Xóa sản phẩm ──────────────────────────────────────────────────────
+function openEdit(p) {
+    document.getElementById('editForm').action       = `/products/${p.id}/edit`;
+    document.getElementById('editMaVach').textContent = p.ma_vach || '—';
+    document.getElementById('editChienLuoc').value   = p.chien_luoc || 'mass';
+    document.getElementById('editTinhTrang').value   = p.tinh_trang_kho || 'san';
+    document.getElementById('editUuTien').value      = String(p.uu_tien || '2');
+    new bootstrap.Modal(document.getElementById('editModal')).show();
+}
+
+function openDelete(btn) {
+    const id     = btn.dataset.id;
+    const name   = btn.dataset.name;
+    const maVach = btn.dataset.mavach;
+    const form   = document.getElementById('deleteForm');
+    form.action  = `/products/${id}/delete`;
+    document.getElementById('deleteName').textContent   = name;
+    document.getElementById('deleteMaVach').textContent = maVach || '(chưa có)';
+    new bootstrap.Modal(document.getElementById('deleteModal')).show();
+}
+
+// ── Kho ảnh Drive ────────────────────────────────────────────────────────────
+let currentPhotoDbId   = null;
+let currentPhotoMaVach = null;
+
+function openPhoto(btn) {
+    currentPhotoMaVach = btn.dataset.mavach;
+    document.getElementById('photoProductName').textContent = btn.dataset.name;
+    document.getElementById('photoMaVach').textContent      = currentPhotoMaVach;
+    new bootstrap.Modal(document.getElementById('photoModal')).show();
+    loadDrivePhotos(currentPhotoMaVach);
+}
+
+function loadDrivePhotos(maVach) {
+    const grid  = document.getElementById('photoGrid');
+    const empty = document.getElementById('photoEmpty');
+    grid.innerHTML = '<div class="col-12 text-center py-3 text-muted"><div class="spinner-border spinner-border-sm me-2"></div>Đang tải từ Drive…</div>';
+    empty.classList.add('d-none');
+    document.getElementById('driveNotConfigured').classList.add('d-none');
+    document.getElementById('driveReady').classList.remove('d-none');
+
+    fetch(`/api/drive/photos/${encodeURIComponent(maVach)}`)
+        .then(r => r.json())
+        .then(data => {
+            grid.innerHTML = '';
+            if (!data.configured) {
+                document.getElementById('driveNotConfigured').classList.remove('d-none');
+                document.getElementById('driveReady').classList.add('d-none');
+                return;
+            }
+            // Hiện link folder Drive nếu có
+            const folderBanner = document.getElementById('driveFolderBanner');
+            if (data.folder) {
+                folderBanner.innerHTML = `<i class="bi bi-folder2-open me-1"></i>Folder: <a href="${data.folder.url}" target="_blank">${escHtml(data.folder.name)}</a>`;
+                folderBanner.classList.remove('d-none');
+            } else {
+                folderBanner.innerHTML = `<i class="bi bi-info-circle me-1"></i>Chưa có folder cho mã vạch <strong>${escHtml(maVach)}</strong>. Tạo folder trong Drive đặt tên bắt đầu bằng mã vạch này.`;
+                folderBanner.classList.remove('d-none');
+            }
+            const photos = data.photos || [];
+            if (!photos.length) { empty.classList.remove('d-none'); return; }
+            photos.forEach(ph => {
+                const col = document.createElement('div');
+                col.className = 'col-6 col-md-3';
+                col.innerHTML = `
+                    <div class="card border h-100" style="cursor:pointer"
+                         onclick="openLightbox(null,'${escHtml(ph.filename)}','${ph.url}')">
+                        <div class="ratio ratio-1x1">
+                            <img src="${ph.thumbnail_url || ph.url}"
+                                 class="object-fit-cover rounded-top" style="width:100%;height:100%"
+                                 onerror="this.src='${ph.url}'">
+                        </div>
+                        <div class="card-body p-1">
+                            <div class="small text-muted text-truncate">${escHtml(ph.filename)}</div>
+                        </div>
+                    </div>`;
+                grid.appendChild(col);
+            });
+        });
+}
+
+function openLightbox(dbId, filename, url) {
+    currentPhotoDbId = dbId;
+    document.getElementById('lightboxImg').src          = url;
+    document.getElementById('lightboxName').textContent = filename;
+    document.getElementById('lightboxLink').href        = url;
+    new bootstrap.Modal(document.getElementById('lightboxModal')).show();
+}
+
+function deletePhoto(dbId) {
+    if (!confirm('Xóa ảnh này khỏi kho và Drive?')) return;
+    fetch(`/api/drive/photos/${dbId}/delete`, { method: 'POST' })
+        .then(r => r.json())
+        .then(d => {
+            if (d.ok) {
+                bootstrap.Modal.getInstance(document.getElementById('lightboxModal')).hide();
+                loadDrivePhotos(currentPhotoMaVach);
+            }
+        });
+}
+
+function uploadDrivePhotos() {
+    const files = document.getElementById('photoFileInput').files;
+    if (!files.length) return;
+    const prog    = document.getElementById('photoUploadProgress');
+    const bar     = document.getElementById('photoProgressBar');
+    const txt     = document.getElementById('photoProgressText');
+    prog.classList.remove('d-none');
+
+    const allFiles = Array.from(files);
+    let done = 0;
+
+    const next = () => {
+        if (done >= allFiles.length) {
+            prog.classList.add('d-none');
+            bar.style.width = '0%';
+            document.getElementById('photoFileInput').value = '';
+            loadDrivePhotos(currentPhotoMaVach);
+            return;
+        }
+        const file = allFiles[done];
+        txt.textContent = `Đang tải lên ${done + 1}/${allFiles.length}: ${file.name}`;
+        bar.style.width = `${Math.round((done / allFiles.length) * 100)}%`;
+
+        const fd = new FormData();
+        fd.append('ma_vach', currentPhotoMaVach);
+        fd.append('photos', file);
+        fetch('/api/drive/photos', { method: 'POST', body: fd })
+            .then(r => r.json())
+            .then(d => {
+                if (!d.ok) alert('Lỗi upload: ' + d.error);
+                done++;
+                next();
+            })
+            .catch(() => { done++; next(); });
+    };
+    next();
+}
+
+function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>
+{% endblock %}

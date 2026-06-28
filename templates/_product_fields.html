@@ -1,0 +1,50 @@
+<div class="row g-3">
+    <div class="col-md-12">
+        <label class="form-label small fw-semibold">Tên sản phẩm <span class="text-danger">*</span></label>
+        <input type="text" name="name" class="form-control" required
+               placeholder="Tên đầy đủ sản phẩm">
+    </div>
+    <div class="col-md-4">
+        <label class="form-label small fw-semibold">Danh mục</label>
+        <input type="text" name="danh_muc" class="form-control" list="catList"
+               placeholder="Áo, Quần, Váy…">
+        <datalist id="catList">
+            {% for c in categories %}
+            <option value="{{ c }}">
+            {% endfor %}
+        </datalist>
+    </div>
+    <div class="col-md-4">
+        <label class="form-label small fw-semibold">Giá bán (VNĐ)</label>
+        <input type="number" name="gia_ban" class="form-control" min="0" value="0">
+    </div>
+    <div class="col-md-4">
+        <label class="form-label small fw-semibold">Ưu tiên</label>
+        <select name="uu_tien" class="form-select">
+            <option value="1">1 — Cao nhất</option>
+            <option value="2" selected>2 — Trung bình</option>
+            <option value="3">3 — Thấp</option>
+        </select>
+    </div>
+    <div class="col-md-4">
+        <label class="form-label small fw-semibold">Loại hàng</label>
+        <select name="chien_luoc" class="form-select">
+            <option value="mass">Mass</option>
+            <option value="thanh ly">Thanh lý</option>
+            <option value="mo ban">Mở bán</option>
+            <option value="order">Order</option>
+        </select>
+    </div>
+    <div class="col-md-4">
+        <label class="form-label small fw-semibold">Tình trạng kho</label>
+        <select name="tinh_trang_kho" class="form-select">
+            <option value="san">Sẵn hàng</option>
+            <option value="order">Order</option>
+        </select>
+    </div>
+    <div class="col-md-12">
+        <label class="form-label small fw-semibold">Link ảnh</label>
+        <input type="url" name="link_anh" class="form-control"
+               placeholder="https://...">
+    </div>
+</div>

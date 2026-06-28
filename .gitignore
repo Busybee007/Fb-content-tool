@@ -9,4 +9,6 @@ static/media/*
 !static/media/.gitkeep
 *.db
 .env
+*-key.json
+*.json.key
 .claude/

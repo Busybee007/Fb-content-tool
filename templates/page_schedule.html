@@ -724,13 +724,13 @@ document.getElementById('productSearch').addEventListener('input', function() {
     filterProducts(this.value.toLowerCase());
 });
 
-function filterProducts(q) {
+window.filterProducts = function(q) {
     const terms = q.trim().split(/\s+/).filter(Boolean);
     document.querySelectorAll('.product-row').forEach(row => {
         const s = row.dataset.search;
         row.style.display = (!terms.length || terms.every(t => s.includes(t))) ? '' : 'none';
     });
-}
+};
 
 // Hover effect cho product rows
 document.querySelectorAll('.product-row').forEach(row => {

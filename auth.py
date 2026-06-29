@@ -16,6 +16,7 @@ class User:
         self.id = data["id"]
         self.username = data["username"]
         self.role = data["role"]
+        self.can_order = bool(data.get("can_order", 0))
 
     # Flask-Login interface
     is_authenticated = True
@@ -36,6 +37,17 @@ def admin_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
         if not current_user.is_authenticated or current_user.role != "admin":
+            abort(403)
+        return f(*args, **kwargs)
+    return login_required(decorated)
+
+
+def order_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not current_user.is_authenticated:
+            abort(403)
+        if current_user.role != "admin" and not current_user.can_order:
             abort(403)
         return f(*args, **kwargs)
     return login_required(decorated)

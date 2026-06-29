@@ -48,6 +48,7 @@
                         <tr>
                             <th class="ps-4">Tên đăng nhập</th>
                             <th>Vai trò</th>
+                            <th>Order Tool</th>
                             <th>Ngày tạo</th>
                             <th class="pe-4">Thao tác</th>
                         </tr>
@@ -66,6 +67,24 @@
                                 <span class="badge bg-warning text-dark">Admin</span>
                                 {% else %}
                                 <span class="badge bg-secondary">Nhân viên</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if user.role == 'admin' %}
+                                <span class="text-muted small">—</span>
+                                {% else %}
+                                <form method="POST" class="d-inline">
+                                    <input type="hidden" name="action" value="toggle_order">
+                                    <input type="hidden" name="user_id" value="{{ user.id }}">
+                                    <button type="submit"
+                                            class="btn btn-sm {% if user.can_order %}btn-success{% else %}btn-outline-secondary{% endif %}">
+                                        {% if user.can_order %}
+                                        <i class="bi bi-check-circle me-1"></i>Có
+                                        {% else %}
+                                        <i class="bi bi-x-circle me-1"></i>Không
+                                        {% endif %}
+                                    </button>
+                                </form>
                                 {% endif %}
                             </td>
                             <td class="text-muted small">{{ user.created_at[:10] }}</td>

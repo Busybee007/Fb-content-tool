@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS users (
     username      TEXT UNIQUE NOT NULL,
     password_hash TEXT NOT NULL,
     role          TEXT NOT NULL DEFAULT 'employee',
+    can_order     INTEGER NOT NULL DEFAULT 0,
     created_at    TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -166,6 +167,10 @@ def init_db():
 
 def _migrate(conn):
     """Add new columns to existing tables without losing data."""
+    user_cols = {r[1] for r in conn.execute("PRAGMA table_info(users)").fetchall()}
+    if "can_order" not in user_cols:
+        conn.execute("ALTER TABLE users ADD COLUMN can_order INTEGER NOT NULL DEFAULT 0")
+
     cols = {r[1] for r in conn.execute("PRAGMA table_info(schedule_slots)").fetchall()}
     if "media_type" not in cols:
         conn.execute("ALTER TABLE schedule_slots ADD COLUMN media_type TEXT DEFAULT ''")
@@ -871,6 +876,11 @@ def save_product_content(ma_vach, caption, media_type, media_value, post_time):
 
 
 # ── Order Tool: supplier mapping ──────────────────────────────────────────────
+
+def set_user_can_order(user_id, value: bool):
+    with get_db() as conn:
+        conn.execute("UPDATE users SET can_order = ? WHERE id = ?", (1 if value else 0, user_id))
+
 
 def upsert_supplier_map(rows):
     """rows: list of (barcode, product_name, supplier)"""

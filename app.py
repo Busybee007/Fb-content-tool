@@ -25,7 +25,7 @@ from flask_login import current_user, login_required, login_user, logout_user
 from werkzeug.utils import secure_filename
 
 import db
-from auth import User, admin_required, login_manager, page_access_required
+from auth import User, admin_required, login_manager, order_required, page_access_required
 from services.excel_import import parse_excel
 from services.page_allocator import DAYS, DEFAULT_PER_DAY, allocate_page_week
 
@@ -543,6 +543,16 @@ def admin_users():
                 db.update_user_password(user_id, new_pw)
                 flash("Đã đổi mật khẩu.", "success")
 
+        elif action == "toggle_order":
+            user_id = request.form.get("user_id", type=int)
+            if user_id:
+                target = db.get_user_by_id(user_id)
+                if target:
+                    new_val = not bool(target.get("can_order", 0))
+                    db.set_user_can_order(user_id, new_val)
+                    state = "bật" if new_val else "tắt"
+                    flash(f"Đã {state} quyền Order Tool cho '{target['username']}'.", "success")
+
         elif action == "delete":
             user_id = request.form.get("user_id", type=int)
             if user_id == current_user.id:
@@ -946,7 +956,7 @@ def _current_monday():
 # ── Order Tool ────────────────────────────────────────────────────────────────
 
 @app.route("/order-tool", methods=["GET", "POST"])
-@login_required
+@order_required
 def order_tool():
     supplier_count = db.count_supplier_map()
 

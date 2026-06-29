@@ -57,6 +57,7 @@
                         </a>
                     </li>
                     {% endif %}
+                    {% if current_user.role == 'admin' %}
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle{% if request.path.startswith('/admin') %} active fw-semibold{% endif %}"
                            href="#" data-bs-toggle="dropdown">

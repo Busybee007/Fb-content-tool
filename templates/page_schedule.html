@@ -290,13 +290,12 @@
             <div class="modal-body">
                 <div class="input-group mb-3">
                     <input type="text" class="form-control" id="productSearch"
-                           placeholder="Tìm theo tên, danh mục, mã vạch... rồi nhấn Enter"
-                           onkeydown="if(event.key==='Enter'){filterProducts(this.value.toLowerCase());event.preventDefault();}">
-                    <button class="btn btn-primary" type="button" id="productSearchBtn"
-                            onclick="filterProducts(document.getElementById('productSearch').value.toLowerCase())">
+                           placeholder="Tìm theo tên, danh mục, mã vạch... rồi nhấn Enter">
+                    <button class="btn btn-primary" type="button" id="productSearchBtn">
                         <i class="bi bi-search me-1"></i>Tìm
                     </button>
                 </div>
+                <div id="searchResultCount" class="text-muted small mb-2"></div>
                 <div id="productList">
                     {% for p in all_products %}
                     <div class="product-row d-flex align-items-center gap-3 p-2 rounded mb-1"
@@ -737,18 +736,29 @@ function confirmReplace(el) {
     .catch(() => alert('Không thể kết nối server. Thử lại.'));
 }
 
-['input', 'keyup', 'compositionend', 'change'].forEach(evt => {
-    document.getElementById('productSearch').addEventListener(evt, function() {
-        filterProducts(this.value.toLowerCase());
-    });
+document.getElementById('productSearch').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') { e.preventDefault(); doSearch(); }
 });
+document.getElementById('productSearchBtn').addEventListener('click', doSearch);
+
+function doSearch() {
+    const q = (document.getElementById('productSearch').value || '').toLowerCase();
+    filterProducts(q);
+}
 
 window.filterProducts = function(q) {
     const terms = q.trim().split(/\s+/).filter(Boolean);
+    let shown = 0;
     document.querySelectorAll('.product-row').forEach(row => {
-        const s = row.dataset.search;
-        row.style.display = (!terms.length || terms.every(t => s.includes(t))) ? '' : 'none';
+        const match = !terms.length || terms.every(t => row.dataset.search.includes(t));
+        row.style.display = match ? '' : 'none';
+        if (match) shown++;
     });
+    const countEl = document.getElementById('searchResultCount');
+    if (countEl) countEl.textContent = terms.length ? `Tìm thấy ${shown} sản phẩm` : '';
+    // Scroll modal body về đầu
+    const body = document.querySelector('#replaceModal .modal-body');
+    if (body) body.scrollTop = 0;
 };
 
 // Hover effect cho product rows

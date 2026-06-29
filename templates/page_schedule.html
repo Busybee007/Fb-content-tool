@@ -751,7 +751,7 @@ window.filterProducts = function(q) {
     let shown = 0;
     document.querySelectorAll('.product-row').forEach(row => {
         const match = !terms.length || terms.every(t => row.dataset.search.includes(t));
-        row.style.display = match ? '' : 'none';
+        row.classList.toggle('d-none', !match);
         if (match) shown++;
     });
     const countEl = document.getElementById('searchResultCount');

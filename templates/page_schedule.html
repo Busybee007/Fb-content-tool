@@ -722,8 +722,10 @@ document.getElementById('productSearch').addEventListener('input', function() {
 });
 
 function filterProducts(q) {
+    const terms = q.trim().split(/\s+/).filter(Boolean);
     document.querySelectorAll('.product-row').forEach(row => {
-        row.style.display = (!q || row.dataset.search.includes(q)) ? '' : 'none';
+        const s = row.dataset.search;
+        row.style.display = (!terms.length || terms.every(t => s.includes(t))) ? '' : 'none';
     });
 }
 

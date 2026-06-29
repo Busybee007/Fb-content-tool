@@ -720,8 +720,10 @@ function confirmReplace(el) {
     .catch(() => alert('Không thể kết nối server. Thử lại.'));
 }
 
-document.getElementById('productSearch').addEventListener('input', function() {
-    filterProducts(this.value.toLowerCase());
+['input', 'keyup', 'compositionend', 'change'].forEach(evt => {
+    document.getElementById('productSearch').addEventListener(evt, function() {
+        filterProducts(this.value.toLowerCase());
+    });
 });
 
 window.filterProducts = function(q) {

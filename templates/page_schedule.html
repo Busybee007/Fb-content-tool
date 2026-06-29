@@ -290,13 +290,11 @@
             <div class="modal-body">
                 <div class="input-group mb-3">
                     <input type="text" class="form-control" id="productSearch"
-                           placeholder="Tìm theo tên, danh mục, mã vạch..."
-                           oninput="filterProducts(this.value.toLowerCase())"
-                           onkeyup="filterProducts(this.value.toLowerCase())"
-                           onpaste="setTimeout(()=>filterProducts(document.getElementById('productSearch').value.toLowerCase()),10)">
-                    <button class="btn btn-outline-primary" type="button"
+                           placeholder="Tìm theo tên, danh mục, mã vạch... rồi nhấn Enter"
+                           onkeydown="if(event.key==='Enter'){filterProducts(this.value.toLowerCase());event.preventDefault();}">
+                    <button class="btn btn-primary" type="button" id="productSearchBtn"
                             onclick="filterProducts(document.getElementById('productSearch').value.toLowerCase())">
-                        <i class="bi bi-search"></i>
+                        <i class="bi bi-search me-1"></i>Tìm
                     </button>
                 </div>
                 <div id="productList">

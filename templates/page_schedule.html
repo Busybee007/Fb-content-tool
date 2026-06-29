@@ -3,20 +3,77 @@
 
 {% block extra_head %}
 <style>
-.day-col { min-width: 160px; }
-.slot-card { background:#fff; border:1px solid #e9ecef; border-radius:8px; padding:8px 10px;
-             margin-bottom:6px; cursor:pointer; transition:border-color .15s, box-shadow .15s; }
-.slot-card:hover { border-color:#1877f2; box-shadow:0 2px 8px rgba(24,119,242,.15); }
-.slot-card.selected { border-color:#1877f2; background:#e8f0fe; box-shadow:0 0 0 2px #1877f2; }
-.slot-thumb { width:36px; height:36px; object-fit:cover; border-radius:5px; flex-shrink:0; }
-.slot-thumb-ph { width:36px; height:36px; background:#f0f0f0; border-radius:5px;
-                  display:flex; align-items:center; justify-content:center; flex-shrink:0; }
-.day-header { background:linear-gradient(135deg,#1877f2,#0d5dbf); color:#fff;
-              border-radius:8px; padding:8px 12px; margin-bottom:10px; text-align:center; }
-.badge-chien-luoc-mass     { background:#0d6efd; }
-.badge-chien-luoc-thanh-ly { background:#dc3545; }
-.badge-chien-luoc-mo-ban   { background:#0dcaf0; color:#000; }
-.badge-chien-luoc-order    { background:#6c757d; }
+/* Full-width page override */
+@media (min-width: 992px) {
+    main.container { max-width: 100% !important; padding-left: 1.5rem !important; padding-right: 1.5rem !important; }
+}
+
+/* 7-day CSS grid */
+.week-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 10px;
+    min-width: 980px;
+}
+
+/* Slot card */
+.slot-card {
+    background: #fff;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 9px 10px;
+    margin-bottom: 8px;
+    cursor: grab;
+    transition: border-color .15s, box-shadow .15s, opacity .15s;
+    user-select: none;
+}
+.slot-card:hover { border-color: #1877f2; box-shadow: 0 2px 10px rgba(24,119,242,.18); }
+.slot-card.selected { border-color: #1877f2; background: #e8f0fe; box-shadow: 0 0 0 2.5px #1877f2; }
+.slot-card.dragging { opacity: 0.35; cursor: grabbing; }
+.slot-card.drag-over { border-color: #0d6efd; background: #eff6ff; box-shadow: 0 0 0 2.5px #0d6efd; transform: scale(1.01); }
+
+/* Thumbnail */
+.slot-thumb { width: 38px; height: 38px; object-fit: cover; border-radius: 6px; flex-shrink: 0; }
+.slot-thumb-ph { width: 38px; height: 38px; background: #f1f5f9; border-radius: 6px;
+                  display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+
+/* Typography */
+.slot-name {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: #1e3a5f;
+    line-height: 1.35;
+    word-break: break-word;
+    cursor: pointer;
+    text-decoration: underline dotted #93c5fd;
+    text-underline-offset: 2px;
+}
+.slot-name:hover { color: #1877f2; }
+.slot-barcode {
+    font-family: 'Courier New', monospace;
+    font-size: 10px;
+    color: #94a3b8;
+    letter-spacing: 0.3px;
+    margin-top: 2px;
+}
+.slot-price { font-size: 11.5px; font-weight: 600; color: #0f766e; }
+
+/* Day header */
+.day-header {
+    background: linear-gradient(135deg, #1877f2, #0d5dbf);
+    color: #fff;
+    border-radius: 9px;
+    padding: 9px 10px;
+    margin-bottom: 10px;
+    text-align: center;
+    font-size: 13px;
+}
+
+/* Badges */
+.badge-chien-luoc-mass     { background: #3b82f6; }
+.badge-chien-luoc-thanh-ly { background: #ef4444; }
+.badge-chien-luoc-mo-ban   { background: #06b6d4; color: #fff; }
+.badge-chien-luoc-order    { background: #6b7280; }
 </style>
 {% endblock %}
 
@@ -83,57 +140,58 @@
 
 <!-- 7-day grid -->
 <div class="overflow-auto">
-<div class="d-flex gap-3" style="min-width:max-content;">
+<div class="week-grid">
     {% for day in date_labels %}
     {% set slots = schedule[day.date] %}
-    <div class="day-col" style="width:180px;">
+    <div class="day-col">
         <div class="day-header">
             <div class="fw-bold">{{ day.label }}</div>
             <div class="small opacity-90">{{ day.display }} · {{ slots|length }} SP</div>
         </div>
 
         {% for slot in slots %}
-        {% set pc = slot.post_time or '' %}
         <div class="slot-card" id="slot-{{ slot.id }}"
              data-mavach="{{ slot.ma_vach|e }}"
-             onclick="selectSlot({{ slot.id }}, '{{ slot.name[:30]|replace("'","\\'")|safe }}')">
-            <div class="d-flex align-items-center gap-2">
+             draggable="true"
+             onclick="selectSlot({{ slot.id }}, '{{ slot.name|replace("'","\\'")|safe }}')">
+            <div class="d-flex align-items-start gap-2">
                 {% if slot.link_anh %}
                 <img src="{{ slot.link_anh }}" class="slot-thumb" alt=""
                      onerror="this.style.display='none'">
                 {% else %}
                 <div class="slot-thumb-ph"><i class="bi bi-image text-muted small"></i></div>
                 {% endif %}
-                <div class="flex-grow-1 overflow-hidden">
-                    <div class="small fw-semibold text-truncate slot-name content-trigger"
-                         title="Nhấn để nhập content"
-                         style="cursor:pointer; color:#1877f2; text-decoration:underline dotted;"
-                         onclick="event.stopPropagation(); openContent(this)">
-                        {{ slot.name[:35] }}
-                    </div>
-                    <div class="d-flex align-items-center gap-1 mt-1 flex-wrap">
-                        <span class="badge small px-1
-                            {% if slot.chien_luoc == 'mass' %}badge-chien-luoc-mass
-                            {% elif slot.chien_luoc == 'thanh ly' %}badge-chien-luoc-thanh-ly
-                            {% elif slot.chien_luoc == 'mo ban' %}badge-chien-luoc-mo-ban
-                            {% else %}badge-chien-luoc-order{% endif %}">
-                            {{ slot.chien_luoc }}
-                        </span>
-                        <span class="text-muted slot-price" style="font-size:11px;">{{ "{:,.0f}".format(slot.gia_ban) }}đ</span>
-                    </div>
-                    <div class="content-status mt-1" style="font-size:10px;">
-                        {% if slot.post_time %}
-                        <span class="text-success"><i class="bi bi-check-circle-fill"></i> {{ slot.post_time }}</span>
-                        {% elif slot.caption %}
-                        <span class="text-success"><i class="bi bi-check-circle-fill"></i> Có content</span>
-                        {% endif %}
-                    </div>
+                <div class="flex-grow-1 min-w-0">
+                    <div class="slot-name content-trigger"
+                         onclick="event.stopPropagation(); openContent(this)">{{ slot.name }}</div>
+                    {% if slot.ma_vach %}
+                    <div class="slot-barcode">{{ slot.ma_vach }}</div>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="d-flex align-items-center justify-content-between mt-2">
+                <div class="d-flex align-items-center gap-1 flex-wrap">
+                    <span class="badge small px-1
+                        {% if slot.chien_luoc == 'mass' %}badge-chien-luoc-mass
+                        {% elif slot.chien_luoc == 'thanh ly' %}badge-chien-luoc-thanh-ly
+                        {% elif slot.chien_luoc == 'mo ban' %}badge-chien-luoc-mo-ban
+                        {% else %}badge-chien-luoc-order{% endif %}">
+                        {{ slot.chien_luoc }}
+                    </span>
+                    <span class="slot-price">{{ "{:,.0f}".format(slot.gia_ban) }}đ</span>
+                </div>
+                <div class="content-status" style="font-size:10px;">
+                    {% if slot.post_time %}
+                    <span class="text-success"><i class="bi bi-check-circle-fill"></i> {{ slot.post_time }}</span>
+                    {% elif slot.caption %}
+                    <span class="text-success"><i class="bi bi-check-circle-fill"></i> Có content</span>
+                    {% endif %}
                 </div>
             </div>
             <div class="mt-1 text-end">
                 <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-1 btn-replace"
                         style="font-size:10px;"
-                        onclick="event.stopPropagation(); openReplace({{ slot.id }}, '{{ slot.name[:40]|replace("'","\\'")|safe }}')">
+                        onclick="event.stopPropagation(); openReplace({{ slot.id }}, '{{ slot.name|replace("'","\\'")|safe }}')">
                     <i class="bi bi-arrow-repeat"></i> Thay SP
                 </button>
             </div>
@@ -148,7 +206,7 @@
 
 <p class="text-muted small mt-3">
     <i class="bi bi-info-circle me-1"></i>
-    Click 1 sản phẩm → click sản phẩm thứ 2 để hoán đổi. Nhấn <strong>Thay SP</strong> để chọn sản phẩm thay thế.
+    <strong>Kéo thả</strong> để hoán đổi vị trí. Hoặc click 1 SP → click SP thứ 2 để hoán đổi. Nhấn <strong>Thay SP</strong> để đổi sang sản phẩm khác.
 </p>
 {% endif %}
 
@@ -336,8 +394,10 @@
 <script>
 let selectedSlotId = null;
 let selectedSlotName = null;
+let _didDrag = false;
 
 function selectSlot(slotId, slotName) {
+    if (_didDrag) { _didDrag = false; return; }
     if (selectedSlotId === null) {
         selectedSlotId = slotId;
         selectedSlotName = slotName;
@@ -361,6 +421,46 @@ function clearSwap() {
     selectedSlotName = null;
     document.getElementById('swapBar').classList.add('d-none');
 }
+
+// ── Drag & Drop ───────────────────────────────────────────────────────────────
+(function initDragDrop() {
+    let dragSrcId = null;
+
+    function attachDnd(card) {
+        card.addEventListener('dragstart', e => {
+            dragSrcId = card.id.replace('slot-', '');
+            card.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', dragSrcId);
+        });
+        card.addEventListener('dragend', () => {
+            card.classList.remove('dragging');
+            document.querySelectorAll('.slot-card.drag-over').forEach(c => c.classList.remove('drag-over'));
+            _didDrag = true;
+            setTimeout(() => { _didDrag = false; }, 200);
+        });
+        card.addEventListener('dragover', e => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            if (card.id !== 'slot-' + dragSrcId) card.classList.add('drag-over');
+        });
+        card.addEventListener('dragleave', e => {
+            if (!card.contains(e.relatedTarget)) card.classList.remove('drag-over');
+        });
+        card.addEventListener('drop', e => {
+            e.preventDefault();
+            card.classList.remove('drag-over');
+            const targetId = card.id.replace('slot-', '');
+            if (dragSrcId && dragSrcId !== targetId) {
+                document.getElementById('swapSlotA').value = dragSrcId;
+                document.getElementById('swapSlotB').value = targetId;
+                document.getElementById('swapForm').submit();
+            }
+        });
+    }
+
+    document.querySelectorAll('.slot-card').forEach(attachDnd);
+})();
 
 // ── Content popup ─────────────────────────────────────────────────────────────
 let contentModal = null;
@@ -700,8 +800,7 @@ function confirmReplace(el) {
     .then(data => {
         if (!data.ok) { alert('Lỗi: ' + (data.error || 'Không xác định')); return; }
         const card = document.getElementById('slot-' + activeSlotId);
-        card.querySelector('.slot-name').textContent = productName.substring(0, 35);
-        card.querySelector('.slot-name').title = productName;
+        card.querySelector('.slot-name').textContent = productName;
         card.querySelector('.slot-price').textContent = new Intl.NumberFormat('vi-VN').format(productPrice) + 'đ';
         if (productImg) {
             const img = card.querySelector('.slot-thumb');

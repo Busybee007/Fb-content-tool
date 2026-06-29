@@ -943,5 +943,188 @@ def _current_monday():
     return (today - timedelta(days=today.weekday())).isoformat()
 
 
+# ── Order Tool ────────────────────────────────────────────────────────────────
+
+@app.route("/order-tool", methods=["GET", "POST"])
+@login_required
+def order_tool():
+    supplier_count = db.count_supplier_map()
+
+    if request.method == "POST":
+        action = request.form.get("action")
+
+        # ── Cập nhật bảng NCC từ file Products ───────────────────────────────
+        if action in ("process", "update_supplier"):
+            supplier_file = request.files.get("supplier_file")
+            if supplier_file and supplier_file.filename:
+                rows = _parse_excel_cols(
+                    supplier_file.read(),
+                    col_barcode="Mã vạch",
+                    col_name="Tên sản phẩm",
+                    col_extra="Nhà cung cấp",
+                )
+                supplier_rows = [
+                    (r["barcode"], r["name"] or "", r["extra"] or "")
+                    for r in rows if r["barcode"]
+                ]
+                saved = db.upsert_supplier_map(supplier_rows)
+                supplier_count = db.count_supplier_map()
+                if action == "update_supplier":
+                    flash(f"Đã cập nhật {saved} sản phẩm vào bảng NCC ({supplier_count} tổng).", "success")
+                    return redirect(url_for("order_tool"))
+
+        if action != "process":
+            return redirect(url_for("order_tool"))
+
+        # ── Xử lý đơn hàng ───────────────────────────────────────────────────
+        order_file = request.files.get("order_file")
+        inventory_file = request.files.get("inventory_file")
+
+        if not order_file or not order_file.filename:
+            flash("Vui lòng chọn file đơn hàng.", "danger")
+            return redirect(url_for("order_tool"))
+        if not inventory_file or not inventory_file.filename:
+            flash("Vui lòng chọn file tồn kho.", "danger")
+            return redirect(url_for("order_tool"))
+
+        # Parse đơn hàng → gộp SL theo barcode
+        order_rows = _parse_excel_cols(
+            order_file.read(),
+            col_barcode="Mã vạch",
+            col_name="Sản phẩm",
+            col_extra="Số lượng",
+        )
+        orders = {}
+        for r in order_rows:
+            bc = str(r["barcode"]).strip() if r["barcode"] else ""
+            if not bc or bc == "None":
+                continue
+            qty = int(r["extra"] or 0)
+            if bc not in orders:
+                orders[bc] = {"name": r["name"] or "", "qty": 0}
+            orders[bc]["qty"] += qty
+
+        # Parse tồn kho → {barcode: available}
+        inv_rows = _parse_excel_cols(
+            inventory_file.read(),
+            col_barcode="Barcode",
+            col_name=None,
+            col_extra="K.Dụng",
+        )
+        inventory = {}
+        for r in inv_rows:
+            bc = str(r["barcode"]).strip() if r["barcode"] else ""
+            if bc:
+                inventory[bc] = int(r["extra"] or 0)
+
+        # Lấy bảng NCC
+        supplier_map = db.get_supplier_map()
+
+        # Tính cần nhập
+        results = []
+        for bc, info in orders.items():
+            needed = info["qty"]
+            available = inventory.get(bc, 0)
+            to_order = max(0, needed - available)
+            if to_order == 0:
+                continue
+            sup_info = supplier_map.get(bc, {})
+            results.append({
+                "barcode": bc,
+                "name": info["name"],
+                "total_ordered": needed,
+                "available": available,
+                "to_order": to_order,
+                "supplier": sup_info.get("supplier") or "Chưa xác định",
+            })
+
+        if not results:
+            flash("Không có sản phẩm nào cần đặt thêm — tồn kho đủ hết!", "success")
+            return redirect(url_for("order_tool"))
+
+        results.sort(key=lambda x: (x["supplier"], x["barcode"]))
+
+        # Xuất Excel
+        import openpyxl
+        from openpyxl.styles import Alignment, Font, PatternFill
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Đề xuất đặt hàng"
+
+        headers = ["STT", "Barcode", "Tên sản phẩm", "SL đơn hàng", "Tồn KD", "Cần nhập", "Nhà cung cấp"]
+        widths  = [6, 18, 48, 14, 10, 12, 28]
+
+        header_fill = PatternFill(start_color="1877F2", end_color="1877F2", fill_type="solid")
+        header_font = Font(color="FFFFFF", bold=True)
+        supplier_colors = {}
+        palette = ["DBEAFE", "D1FAE5", "FEF9C3", "FCE7F3", "EDE9FE", "FFEDD5", "ECFDF5", "FEF2F2"]
+
+        for col, (h, w) in enumerate(zip(headers, widths), 1):
+            c = ws.cell(row=1, column=col, value=h)
+            c.fill = header_fill
+            c.font = header_font
+            c.alignment = Alignment(horizontal="center")
+            ws.column_dimensions[c.column_letter].width = w
+
+        color_idx = 0
+        for stt, r in enumerate(results, 1):
+            sup = r["supplier"]
+            if sup not in supplier_colors:
+                supplier_colors[sup] = palette[color_idx % len(palette)]
+                color_idx += 1
+            fill = PatternFill(start_color=supplier_colors[sup],
+                               end_color=supplier_colors[sup], fill_type="solid")
+            row_data = [stt, r["barcode"], r["name"],
+                        r["total_ordered"], r["available"], r["to_order"], r["supplier"]]
+            for col, val in enumerate(row_data, 1):
+                c = ws.cell(row=stt + 1, column=col, value=val)
+                c.fill = fill
+                if col in (4, 5, 6):
+                    c.alignment = Alignment(horizontal="center")
+
+        ws.freeze_panes = "A2"
+        ws.auto_filter.ref = ws.dimensions
+
+        buf = io.BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+
+        from datetime import datetime
+        fname = f"de_xuat_dat_hang_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
+        return send_file(buf, as_attachment=True, download_name=fname,
+                         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+    return render_template("order_tool.html", supplier_count=supplier_count)
+
+
+def _parse_excel_cols(file_bytes, col_barcode, col_name, col_extra):
+    """Parse Excel, trả về list of {barcode, name, extra} dựa vào tên cột."""
+    import openpyxl
+    from io import BytesIO
+    wb = openpyxl.load_workbook(BytesIO(file_bytes), read_only=True, data_only=True)
+    ws = wb.active
+    rows = list(ws.iter_rows(values_only=True))
+    wb.close()
+    if not rows:
+        return []
+
+    headers = [str(h).strip() if h is not None else "" for h in rows[0]]
+    idx_bc   = headers.index(col_barcode) if col_barcode in headers else None
+    idx_name = headers.index(col_name)    if col_name and col_name in headers else None
+    idx_ext  = headers.index(col_extra)   if col_extra and col_extra in headers else None
+
+    result = []
+    for row in rows[1:]:
+        if not any(row):
+            continue
+        result.append({
+            "barcode": row[idx_bc]   if idx_bc   is not None else None,
+            "name":    row[idx_name] if idx_name is not None else None,
+            "extra":   row[idx_ext]  if idx_ext  is not None else None,
+        })
+    return result
+
+
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=5000)

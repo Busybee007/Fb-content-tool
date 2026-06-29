@@ -1,0 +1,175 @@
+{% extends "base.html" %}
+{% block title %}Đề xuất đặt hàng – {{ app_name }}{% endblock %}
+
+{% block extra_head %}
+<style>
+.file-zone { border: 2px dashed #cbd5e1; border-radius: 10px; padding: 1.25rem 1rem;
+             transition: border-color .15s, background .15s; cursor: pointer; }
+.file-zone:hover, .file-zone.has-file { border-color: #1877f2; background: #eff6ff; }
+.file-zone input[type=file] { display: none; }
+.file-label { font-size: .8rem; color: #64748b; margin-top: .35rem; }
+.step-num { width: 28px; height: 28px; border-radius: 50%; background: #1877f2;
+            color: #fff; font-weight: 700; font-size: .85rem;
+            display: inline-flex; align-items: center; justify-content: center;
+            flex-shrink: 0; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-hero mb-4">
+    <h1 class="h3 fw-bold mb-1"><i class="bi bi-cart-check me-2"></i>Đề xuất đặt hàng</h1>
+    <p class="mb-0 opacity-90">
+        Upload 3 file → hệ thống tự tính sản phẩm cần nhập → xuất Excel theo nhà cung cấp.
+    </p>
+</div>
+
+<div class="row g-4">
+
+    <!-- CỘT TRÁI: Hướng dẫn + cập nhật NCC -->
+    <div class="col-lg-4">
+
+        <!-- Bảng NCC hiện tại -->
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-body p-4">
+                <h6 class="fw-bold mb-1">
+                    <i class="bi bi-building me-2 text-primary"></i>Bảng nhà cung cấp
+                </h6>
+                <p class="text-muted small mb-3">
+                    Hiện có <strong>{{ supplier_count }}</strong> sản phẩm đã có thông tin NCC.
+                    File NCC được tích lũy — upload thêm để bổ sung.
+                </p>
+                <form method="POST" enctype="multipart/form-data">
+                    <input type="hidden" name="action" value="update_supplier">
+                    <div class="file-zone" onclick="this.querySelector('input').click()">
+                        <i class="bi bi-file-earmark-arrow-up text-primary fs-4 d-block mb-1"></i>
+                        <div class="small fw-semibold">File sản phẩm (Products)</div>
+                        <div class="file-label">Nhanh.vn_Products_...xlsx</div>
+                        <input type="file" name="supplier_file" accept=".xlsx,.xlsm"
+                               onchange="markZone(this)">
+                    </div>
+                    <button type="submit" class="btn btn-outline-primary w-100 mt-3 btn-sm">
+                        <i class="bi bi-arrow-repeat me-1"></i>Cập nhật bảng NCC
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Hướng dẫn -->
+        <div class="card border-0 shadow-sm">
+            <div class="card-body p-4">
+                <h6 class="fw-bold mb-3"><i class="bi bi-info-circle me-2 text-primary"></i>Logic xử lý</h6>
+                <div class="d-flex flex-column gap-2 small">
+                    <div class="d-flex gap-2">
+                        <span class="badge bg-success">Đủ tồn</span>
+                        <span class="text-muted">Tồn KD ≥ SL đơn → bỏ qua</span>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <span class="badge bg-warning text-dark">Thiếu</span>
+                        <span class="text-muted">Tồn KD &lt; SL đơn → đặt phần chênh lệch</span>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <span class="badge bg-danger">Chưa có</span>
+                        <span class="text-muted">Không có trong tồn kho → đặt toàn bộ</span>
+                    </div>
+                </div>
+                <hr class="my-3">
+                <div class="small text-muted">
+                    <strong>Cột dùng:</strong><br>
+                    • Đơn hàng: <code>Mã vạch</code>, <code>Sản phẩm</code>, <code>Số lượng</code><br>
+                    • Tồn kho: <code>Barcode</code>, <code>K.Dụng</code><br>
+                    • NCC: <code>Mã vạch</code>, <code>Tên sản phẩm</code>, <code>Nhà cung cấp</code>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- CỘT PHẢI: Upload & xử lý -->
+    <div class="col-lg-8">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body p-4">
+                <h5 class="fw-bold mb-4">
+                    <i class="bi bi-upload me-2 text-primary"></i>Upload file và xuất đề xuất
+                </h5>
+
+                <form method="POST" enctype="multipart/form-data" id="processForm">
+                    <input type="hidden" name="action" value="process">
+
+                    <div class="row g-3 mb-4">
+
+                        <!-- File đơn hàng -->
+                        <div class="col-md-6">
+                            <div class="d-flex align-items-center gap-2 mb-2">
+                                <span class="step-num">1</span>
+                                <span class="fw-semibold">File đơn hàng</span>
+                                <span class="badge bg-danger ms-auto">Bắt buộc</span>
+                            </div>
+                            <div class="file-zone" onclick="this.querySelector('input').click()" id="zone1">
+                                <i class="bi bi-receipt text-primary fs-4 d-block mb-1"></i>
+                                <div class="small fw-semibold">Nhanh.vn_Order_...xlsx</div>
+                                <div class="file-label" id="label1">Chưa chọn file</div>
+                                <input type="file" name="order_file" accept=".xlsx,.xlsm"
+                                       onchange="markZone(this, 'zone1', 'label1')" required>
+                            </div>
+                        </div>
+
+                        <!-- File tồn kho -->
+                        <div class="col-md-6">
+                            <div class="d-flex align-items-center gap-2 mb-2">
+                                <span class="step-num">2</span>
+                                <span class="fw-semibold">File tồn kho</span>
+                                <span class="badge bg-danger ms-auto">Bắt buộc</span>
+                            </div>
+                            <div class="file-zone" onclick="this.querySelector('input').click()" id="zone2">
+                                <i class="bi bi-box-seam text-primary fs-4 d-block mb-1"></i>
+                                <div class="small fw-semibold">hang-hoa_...xlsx</div>
+                                <div class="file-label" id="label2">Chưa chọn file</div>
+                                <input type="file" name="inventory_file" accept=".xlsx,.xlsm"
+                                       onchange="markZone(this, 'zone2', 'label2')" required>
+                            </div>
+                        </div>
+
+                        <!-- File NCC (tùy chọn) -->
+                        <div class="col-12">
+                            <div class="d-flex align-items-center gap-2 mb-2">
+                                <span class="step-num">3</span>
+                                <span class="fw-semibold">File sản phẩm / NCC</span>
+                                <span class="badge bg-secondary ms-auto">Tùy chọn</span>
+                                <span class="small text-muted">(bỏ qua nếu không có gì mới)</span>
+                            </div>
+                            <div class="file-zone" onclick="this.querySelector('input').click()" id="zone3">
+                                <i class="bi bi-building text-primary fs-4 d-block mb-1"></i>
+                                <div class="small fw-semibold">Nhanh.vn_Products_...xlsx</div>
+                                <div class="file-label" id="label3">Chưa chọn file — dùng bảng NCC đã lưu ({{ supplier_count }} SP)</div>
+                                <input type="file" name="supplier_file" accept=".xlsx,.xlsm"
+                                       onchange="markZone(this, 'zone3', 'label3')">
+                            </div>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary btn-lg w-100 fw-semibold">
+                        <i class="bi bi-file-earmark-excel me-2"></i>Tính toán & Tải Excel đề xuất
+                    </button>
+                    <p class="text-muted small text-center mt-2 mb-0">
+                        File Excel sẽ được tải xuống ngay — sắp xếp theo nhà cung cấp, tô màu từng NCC.
+                    </p>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function markZone(input, zoneId, labelId) {
+    if (!input.files.length) return;
+    const name = input.files[0].name;
+    if (zoneId)   document.getElementById(zoneId).classList.add('has-file');
+    if (labelId)  document.getElementById(labelId).textContent = name;
+}
+// Cập nhật NCC inline (không cần zoneId/labelId)
+document.querySelectorAll('.file-zone input[type=file]').forEach(inp => {
+    if (!inp.hasAttribute('onchange')) return;
+});
+</script>
+{% endblock %}

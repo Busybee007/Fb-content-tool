@@ -81,6 +81,13 @@ CREATE TABLE IF NOT EXISTS app_settings (
     value TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS order_supplier_map (
+    barcode      TEXT PRIMARY KEY,
+    product_name TEXT DEFAULT '',
+    supplier     TEXT DEFAULT '',
+    updated_at   TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS content_library (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     ma_vach     TEXT NOT NULL,
@@ -861,3 +868,34 @@ def save_product_content(ma_vach, caption, media_type, media_value, post_time):
                    updated_at=CURRENT_TIMESTAMP""",
             (ma_vach, caption, media_type, media_value, post_time),
         )
+
+
+# ── Order Tool: supplier mapping ──────────────────────────────────────────────
+
+def upsert_supplier_map(rows):
+    """rows: list of (barcode, product_name, supplier)"""
+    with get_db() as conn:
+        conn.executemany(
+            """INSERT INTO order_supplier_map (barcode, product_name, supplier, updated_at)
+               VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+               ON CONFLICT(barcode) DO UPDATE SET
+                   product_name = excluded.product_name,
+                   supplier     = excluded.supplier,
+                   updated_at   = CURRENT_TIMESTAMP""",
+            rows,
+        )
+    return len(rows)
+
+
+def get_supplier_map():
+    """Returns {barcode: {product_name, supplier}}"""
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT barcode, product_name, supplier FROM order_supplier_map"
+        ).fetchall()
+    return {r["barcode"]: {"product_name": r["product_name"], "supplier": r["supplier"]} for r in rows}
+
+
+def count_supplier_map():
+    with get_db() as conn:
+        return conn.execute("SELECT COUNT(*) AS c FROM order_supplier_map").fetchone()["c"]

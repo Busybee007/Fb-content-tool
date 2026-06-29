@@ -290,7 +290,9 @@
             <div class="modal-body">
                 <input type="text" class="form-control mb-3" id="productSearch"
                        placeholder="Tìm theo tên, danh mục, mã vạch..."
-                       oninput="filterProducts(this.value.toLowerCase())">
+                       oninput="filterProducts(this.value.toLowerCase())"
+                       onkeyup="filterProducts(this.value.toLowerCase())"
+                       onpaste="setTimeout(()=>filterProducts(document.getElementById('productSearch').value.toLowerCase()),10)">
                 <div id="productList">
                     {% for p in all_products %}
                     <div class="product-row d-flex align-items-center gap-3 p-2 rounded mb-1"

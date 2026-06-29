@@ -286,6 +286,35 @@
                 <!-- Tab: tạo mới / sửa -->
                 <div id="tab-new" class="p-3 d-none">
                     <input type="hidden" id="editingVersionId">
+
+                    <!-- Drive photo strip -->
+                    <div class="mb-3" id="driveStripSection">
+                        <div class="d-flex align-items-center justify-content-between mb-2">
+                            <label class="form-label small fw-semibold mb-0">
+                                <i class="bi bi-images me-1"></i>Ảnh Drive — chọn 1 để đăng
+                            </label>
+                            <span class="text-muted small" id="driveStripStatus"></span>
+                        </div>
+                        <div id="driveStripGrid" class="d-flex gap-2 flex-wrap align-items-center"
+                             style="min-height:70px;">
+                            <span class="text-muted small">
+                                <span class="spinner-border spinner-border-sm me-1"></span>Đang tải…
+                            </span>
+                        </div>
+                        <div id="driveStripSelected" class="d-none mt-2 p-2 rounded d-flex align-items-center gap-2"
+                             style="background:#e8f0fe; border:1px solid #c2d3fb;">
+                            <img id="driveStripSelectedImg" src=""
+                                 style="width:40px;height:40px;object-fit:cover;border-radius:5px;flex-shrink:0;" alt="">
+                            <div class="flex-grow-1 overflow-hidden">
+                                <div class="small fw-semibold text-primary text-truncate" id="driveStripSelectedName"></div>
+                                <div class="small text-muted">Ảnh đã chọn — sẽ đăng kèm bài viết</div>
+                            </div>
+                            <button type="button" class="btn btn-sm btn-outline-secondary flex-shrink-0"
+                                    onclick="clearDriveStripPhoto()">Bỏ</button>
+                        </div>
+                    </div>
+                    <hr class="mb-3">
+
                     <div class="row g-3 mb-3">
                         <div class="col-md-5">
                             <label class="form-label small fw-semibold">Tên phiên bản</label>
@@ -299,7 +328,7 @@
                     </div>
                     <div class="mb-3">
                         <label class="form-label small fw-semibold">Caption</label>
-                        <textarea class="form-control" id="contentCaption" rows="6"
+                        <textarea class="form-control" id="contentCaption" rows="5"
                                   placeholder="Nhập nội dung bài đăng..."></textarea>
                         <div class="d-flex justify-content-between mt-1">
                             <span class="form-text" id="captionCount">0 ký tự</span>
@@ -310,9 +339,9 @@
                         </div>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label small fw-semibold">Ảnh</label>
+                        <label class="form-label small fw-semibold">Hoặc upload ảnh từ máy</label>
                         <div id="contentImgPreview" class="mb-2 d-none">
-                            <img id="contentImgEl" src="" style="max-height:140px;border-radius:8px;object-fit:cover;" alt="">
+                            <img id="contentImgEl" src="" style="max-height:100px;border-radius:8px;object-fit:cover;" alt="">
                             <button type="button" class="btn btn-sm btn-danger ms-2"
                                     onclick="removeContentImg()"><i class="bi bi-trash"></i></button>
                         </div>
@@ -500,6 +529,7 @@ function openContent(el) {
     currentMaVach = card.dataset.mavach;
     document.getElementById('contentMaVach').value = currentMaVach;
     document.getElementById('contentModalProductName').textContent = el.textContent.trim();
+    _driveStripLoaded = false;
     resetNewForm();
     switchTab('library');
     if (!contentModal) contentModal = new bootstrap.Modal(document.getElementById('contentModal'));
@@ -514,6 +544,7 @@ function switchTab(tab) {
     });
     document.getElementById('saveContentBtn').classList.toggle('d-none', tab !== 'new');
     if (tab === 'photos') loadScheduleDrivePhotos(currentMaVach);
+    if (tab === 'new') loadDriveStripNew(currentMaVach);
 }
 
 // ── Kho ảnh Drive (schedule page) ────────────────────────────────────────────
@@ -702,6 +733,7 @@ function resetNewForm() {
     document.getElementById('saveContentBtn').innerHTML = '<i class="bi bi-floppy me-1"></i>Lưu vào thư viện';
     contentHasNewImg = false; contentRemoveImg = false;
     window._drivePhotoUrl = '';
+    clearDriveStripPhoto(true);
 }
 
 function updateCaptionCount() {
@@ -888,5 +920,78 @@ document.querySelectorAll('.product-row').forEach(row => {
     row.addEventListener('mouseenter', () => row.style.background = '#f0f4ff');
     row.addEventListener('mouseleave', () => row.style.background = '');
 });
+
+// ── Drive photo strip trong tab Tạo mới ──────────────────────────────────────
+let _driveStripLoaded = false;
+
+function loadDriveStripNew(maVach) {
+    if (_driveStripLoaded || !maVach) return;
+    _driveStripLoaded = true;
+    const grid   = document.getElementById('driveStripGrid');
+    const status = document.getElementById('driveStripStatus');
+    grid.innerHTML = '<span class="text-muted small"><span class="spinner-border spinner-border-sm me-1"></span>Đang tải…</span>';
+
+    fetch(`/api/drive/photos/${encodeURIComponent(maVach)}`)
+        .then(r => r.json())
+        .then(data => {
+            const photos = data.photos || [];
+            status.textContent = photos.length ? `${photos.length} ảnh` : '';
+            if (!photos.length) {
+                grid.innerHTML = '<span class="text-muted small"><i class="bi bi-image me-1"></i>Chưa có ảnh Drive cho sản phẩm này</span>';
+                return;
+            }
+            grid.innerHTML = '';
+            photos.forEach((ph, i) => {
+                const el = document.createElement('div');
+                el.style.cssText = 'width:66px;height:66px;border-radius:8px;overflow:hidden;cursor:pointer;border:2px solid #e2e8f0;flex-shrink:0;position:relative;';
+                el.title = ph.filename;
+                el.dataset.url = ph.url;
+                el.dataset.name = ph.filename;
+                el.innerHTML = `<img src="${ph.thumbnail_url || ph.url}" style="width:100%;height:100%;object-fit:cover;display:block;" onerror="this.src='${ph.url}'" alt="">
+                    <div class="strip-check" style="display:none;position:absolute;top:3px;right:3px;background:#1877f2;border-radius:50%;width:18px;height:18px;align-items:center;justify-content:center;">
+                        <i class="bi bi-check2" style="color:#fff;font-size:11px;"></i>
+                    </div>`;
+                el.addEventListener('click', () => selectDriveStripPhoto(el, ph.url, ph.filename));
+                grid.appendChild(el);
+            });
+        })
+        .catch(() => {
+            grid.innerHTML = '<span class="text-muted small">Không tải được ảnh Drive</span>';
+        });
+}
+
+function selectDriveStripPhoto(el, url, filename) {
+    document.querySelectorAll('#driveStripGrid > div').forEach(d => {
+        d.style.borderColor = '#e2e8f0';
+        d.querySelector('.strip-check').style.display = 'none';
+    });
+    el.style.borderColor = '#1877f2';
+    el.querySelector('.strip-check').style.display = 'flex';
+
+    document.getElementById('driveStripSelectedImg').src = url;
+    document.getElementById('driveStripSelectedName').textContent = filename;
+    document.getElementById('driveStripSelected').classList.remove('d-none');
+
+    window._drivePhotoUrl = url;
+    window._drivePhotoName = filename;
+    contentHasNewImg = false;
+    contentRemoveImg = false;
+    document.getElementById('contentImgFile').value = '';
+    document.getElementById('contentImgPreview').classList.add('d-none');
+}
+
+function clearDriveStripPhoto(silent) {
+    document.querySelectorAll('#driveStripGrid > div').forEach(d => {
+        d.style.borderColor = '#e2e8f0';
+        const chk = d.querySelector('.strip-check');
+        if (chk) chk.style.display = 'none';
+    });
+    const sel = document.getElementById('driveStripSelected');
+    if (sel) sel.classList.add('d-none');
+    if (!silent) {
+        window._drivePhotoUrl = '';
+        window._drivePhotoName = '';
+    }
+}
 </script>
 {% endblock %}

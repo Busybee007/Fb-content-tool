@@ -23,6 +23,20 @@ _service = None
 _tmp_key_path = None  # temp file for base64 key (production mode)
 
 
+def _get_parent_folder_id() -> str:
+    """Read folder ID from DB setting first, fall back to env var."""
+    try:
+        import sys, importlib
+        # Lazy import to avoid circular dependency
+        db = sys.modules.get("db") or importlib.import_module("db")
+        val = db.get_setting("drive_parent_folder_id")
+        if val:
+            return str(val)
+    except Exception:
+        pass
+    return os.environ.get("DRIVE_PARENT_FOLDER_ID", _PARENT_FOLDER_ID)
+
+
 def _resolve_key_path() -> str | None:
     """Return path to service account JSON. Supports file path or base64 env var."""
     # Direct file path (local dev)
@@ -49,8 +63,7 @@ def _resolve_key_path() -> str | None:
 
 
 def is_configured() -> bool:
-    p = os.environ.get("DRIVE_PARENT_FOLDER_ID", _PARENT_FOLDER_ID)
-    return bool(_resolve_key_path() and p)
+    return bool(_resolve_key_path() and _get_parent_folder_id())
 
 
 def _get_service():
@@ -73,7 +86,7 @@ def find_barcode_folder(ma_vach: str) -> dict | None:
     Trả về {"id": ..., "name": ..., "url": ...} hoặc None.
     """
     svc    = _get_service()
-    parent = os.environ.get("DRIVE_PARENT_FOLDER_ID", _PARENT_FOLDER_ID)
+    parent = _get_parent_folder_id()
     safe   = ma_vach.replace("'", "\\'")
 
     q = (

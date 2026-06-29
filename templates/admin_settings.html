@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Cài đặt hệ thống – {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="page-hero mb-4">
+    <h1 class="h3 fw-bold mb-1"><i class="bi bi-gear me-2"></i>Cài đặt hệ thống</h1>
+    <p class="mb-0 opacity-90">Cấu hình kết nối dịch vụ và tùy chọn toàn cục.</p>
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-7">
+        <!-- Google Drive -->
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header bg-white border-bottom py-3">
+                <h6 class="fw-bold mb-0"><i class="bi bi-google me-2 text-primary"></i>Google Drive — Kho ảnh sản phẩm</h6>
+            </div>
+            <div class="card-body p-4">
+                <p class="small text-muted mb-3">
+                    Nhập URL hoặc ID của folder Drive chứa ảnh sản phẩm. Nhân viên tạo folder con đặt tên bắt đầu bằng barcode.<br>
+                    VD: <code>2000214330854 - Sạc Belkin</code>
+                </p>
+
+                {% if current_folder_id %}
+                <div class="alert alert-{% if drive_configured %}success{% else %}warning{% endif %} py-2 small mb-3">
+                    <i class="bi bi-{% if drive_configured %}check-circle-fill{% else %}exclamation-triangle{% endif %} me-1"></i>
+                    {% if drive_configured %}
+                    Đang kết nối — Folder ID: <code>{{ current_folder_id }}</code>
+                    <a href="https://drive.google.com/drive/folders/{{ current_folder_id }}" target="_blank" class="ms-2">
+                        <i class="bi bi-box-arrow-up-right"></i> Mở Drive
+                    </a>
+                    {% else %}
+                    Có folder ID nhưng thiếu service account key.
+                    {% endif %}
+                </div>
+                {% else %}
+                <div class="alert alert-secondary py-2 small mb-3">
+                    <i class="bi bi-x-circle me-1"></i>Chưa cấu hình folder Drive.
+                </div>
+                {% endif %}
+
+                <form method="POST">
+                    <input type="hidden" name="action" value="drive_folder">
+                    <label class="form-label fw-semibold small">URL hoặc ID folder mới</label>
+                    <div class="input-group">
+                        <span class="input-group-text"><i class="bi bi-folder2-open"></i></span>
+                        <input type="text" name="folder_input" class="form-control"
+                               placeholder="https://drive.google.com/drive/folders/... hoặc ID thẳng"
+                               value="{{ current_folder_id or '' }}">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-save me-1"></i>Lưu
+                        </button>
+                    </div>
+                    <div class="form-text">Paste URL Drive hoặc chỉ ID folder. App sẽ tự tách ID từ URL.</div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-5">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body p-4">
+                <h6 class="fw-bold mb-3"><i class="bi bi-info-circle me-2 text-muted"></i>Hướng dẫn lấy Folder ID</h6>
+                <ol class="small text-muted ps-3 mb-0">
+                    <li class="mb-2">Mở folder Drive muốn dùng</li>
+                    <li class="mb-2">Copy link trên thanh địa chỉ trình duyệt</li>
+                    <li class="mb-2">Paste vào ô bên trái — app tự tách ID</li>
+                    <li>Share folder đó cho service account email</li>
+                </ol>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

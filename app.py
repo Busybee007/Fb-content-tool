@@ -639,6 +639,34 @@ def admin_pages():
                            page_users=page_users, page_unassigned=page_unassigned)
 
 
+# ── Admin: app settings ─────────────────────────────────────────────────────
+
+@app.route("/admin/settings", methods=["GET", "POST"])
+@admin_required
+def admin_settings():
+    import re as _re
+    if request.method == "POST":
+        action = request.form.get("action")
+        if action == "drive_folder":
+            raw = request.form.get("folder_input", "").strip()
+            # Accept full Drive URL or bare folder ID
+            m = _re.search(r"/folders/([a-zA-Z0-9_-]+)", raw)
+            folder_id = m.group(1) if m else raw
+            if folder_id:
+                db.set_setting("drive_parent_folder_id", folder_id)
+                flash("Đã cập nhật folder Google Drive.", "success")
+            else:
+                flash("Nhập URL hoặc ID folder hợp lệ.", "danger")
+        return redirect(url_for("admin_settings"))
+
+    from services import gdrive
+    current_folder_id = gdrive._get_parent_folder_id()
+    drive_configured = gdrive.is_configured()
+    return render_template("admin_settings.html",
+                           current_folder_id=current_folder_id,
+                           drive_configured=drive_configured)
+
+
 # ── Admin: product management ────────────────────────────────────────────────
 
 @app.route("/products")

@@ -385,17 +385,26 @@ def page_schedule(page_id):
 @app.route("/pages/<int:page_id>/schedule/swap", methods=["POST"])
 @page_access_required
 def schedule_swap(page_id):
+    if request.is_json:
+        data = request.get_json(silent=True) or {}
+        slot_a = data.get("slot_a")
+        slot_b = data.get("slot_b")
+        week_start = data.get("week_start") or _current_monday()
+        if not slot_a or not slot_b or slot_a == slot_b:
+            return jsonify({"ok": False, "error": "Chọn đủ 2 sản phẩm khác nhau"}), 400
+        if not db.swap_schedule_slots(slot_a, slot_b):
+            return jsonify({"ok": False, "error": "Hoán đổi thất bại"}), 500
+        return jsonify({"ok": True})
+
     slot_a = request.form.get("slot_a", type=int)
     slot_b = request.form.get("slot_b", type=int)
     week_start = request.form.get("week_start") or _current_monday()
-
     if not slot_a or not slot_b or slot_a == slot_b:
         flash("Chọn đủ 2 sản phẩm khác nhau để hoán đổi.", "danger")
     elif not db.swap_schedule_slots(slot_a, slot_b):
         flash("Hoán đổi thất bại.", "danger")
     else:
         flash("Đã hoán đổi vị trí 2 sản phẩm.", "success")
-
     return redirect(url_for("page_schedule", page_id=page_id, week_start=week_start))
 
 

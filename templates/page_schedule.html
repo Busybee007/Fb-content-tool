@@ -426,6 +426,17 @@ function clearSwap() {
 (function initDragDrop() {
     let dragSrcId = null;
 
+    function swapDom(idA, idB) {
+        const a = document.getElementById('slot-' + idA);
+        const b = document.getElementById('slot-' + idB);
+        if (!a || !b) return;
+        const ph = document.createElement('div');
+        a.parentNode.insertBefore(ph, a);
+        b.parentNode.insertBefore(a, b);
+        ph.parentNode.insertBefore(b, ph);
+        ph.remove();
+    }
+
     function attachDnd(card) {
         card.addEventListener('dragstart', e => {
             dragSrcId = card.id.replace('slot-', '');
@@ -451,11 +462,22 @@ function clearSwap() {
             e.preventDefault();
             card.classList.remove('drag-over');
             const targetId = card.id.replace('slot-', '');
-            if (dragSrcId && dragSrcId !== targetId) {
-                document.getElementById('swapSlotA').value = dragSrcId;
-                document.getElementById('swapSlotB').value = targetId;
-                document.getElementById('swapForm').submit();
-            }
+            if (!dragSrcId || dragSrcId === targetId) return;
+            // Swap DOM immediately (no reload)
+            swapDom(dragSrcId, targetId);
+            // Persist to server via AJAX
+            fetch('{{ url_for("schedule_swap", page_id=fanpage.id) }}', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    slot_a: parseInt(dragSrcId),
+                    slot_b: parseInt(targetId),
+                    week_start: '{{ week_start }}'
+                })
+            })
+            .then(r => r.json())
+            .then(data => { if (!data.ok) { alert('Lỗi lưu vị trí: ' + (data.error || '?')); swapDom(dragSrcId, targetId); } })
+            .catch(() => { alert('Lỗi kết nối. Vị trí chưa được lưu.'); swapDom(dragSrcId, targetId); });
         });
     }
 

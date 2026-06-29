@@ -670,17 +670,18 @@ function openReplace(slotId, slotName) {
     filterProducts('');
     if (!replaceModal) replaceModal = new bootstrap.Modal(document.getElementById('replaceModal'));
     replaceModal.show();
-    // Poll input value mỗi 150ms — bắt mọi kiểu gõ kể cả Unikey/IME
-    clearInterval(_searchPoller);
-    _searchPoller = setInterval(() => {
+    // Dùng requestAnimationFrame để poll realtime (60fps) — bắt mọi kiểu input
+    _searchPoller = true;
+    (function poll() {
+        if (!_searchPoller) return;
         const val = (document.getElementById('productSearch')?.value || '').toLowerCase();
         if (val !== _lastSearchVal) { _lastSearchVal = val; filterProducts(val); }
-    }, 150);
+        requestAnimationFrame(poll);
+    })();
 }
 
 document.getElementById('replaceModal').addEventListener('hidden.bs.modal', () => {
-    clearInterval(_searchPoller);
-    _searchPoller = null;
+    _searchPoller = false;
 });
 
 function confirmReplace(el) {

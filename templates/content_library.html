@@ -98,9 +98,38 @@
                         <input type="time" class="form-control" id="editPostTime">
                     </div>
                 </div>
+
+                <!-- Drive photo strip -->
+                <div class="mb-3" id="libDriveStripSection">
+                    <div class="d-flex align-items-center justify-content-between mb-2">
+                        <label class="form-label small fw-semibold mb-0">
+                            <i class="bi bi-images me-1"></i>Ảnh Drive — chọn 1 để đăng
+                        </label>
+                        <span class="text-muted small" id="libDriveStripStatus"></span>
+                    </div>
+                    <div id="libDriveStripGrid" class="d-flex gap-2 flex-wrap align-items-center"
+                         style="min-height:70px;">
+                        <span class="text-muted small">
+                            <span class="spinner-border spinner-border-sm me-1"></span>Đang tải…
+                        </span>
+                    </div>
+                    <div id="libDriveStripSelected" class="d-none mt-2 p-2 rounded d-flex align-items-center gap-2"
+                         style="background:#e8f0fe; border:1px solid #c2d3fb;">
+                        <img id="libDriveStripSelectedImg" src=""
+                             style="width:40px;height:40px;object-fit:cover;border-radius:5px;flex-shrink:0;" alt="">
+                        <div class="flex-grow-1 overflow-hidden">
+                            <div class="small fw-semibold text-primary text-truncate" id="libDriveStripSelectedName"></div>
+                            <div class="small text-muted">Ảnh đã chọn — sẽ đăng kèm bài viết</div>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-secondary flex-shrink-0"
+                                onclick="clearLibDriveStrip()">Bỏ</button>
+                    </div>
+                </div>
+                <hr class="mb-3">
+
                 <div class="mb-3">
                     <label class="form-label small fw-semibold">Caption / Content</label>
-                    <textarea class="form-control" id="editCaption" rows="7" placeholder="Nhập nội dung bài đăng..."></textarea>
+                    <textarea class="form-control" id="editCaption" rows="6" placeholder="Nhập nội dung bài đăng..."></textarea>
                     <div class="d-flex justify-content-between mt-1">
                         <span class="form-text" id="editCaptionCount">0 ký tự</span>
                         <button type="button" class="btn btn-sm btn-link p-0"
@@ -110,14 +139,14 @@
                     </div>
                 </div>
                 <div class="mb-3">
-                    <label class="form-label small fw-semibold">Ảnh</label>
+                    <label class="form-label small fw-semibold">Hoặc upload ảnh từ máy</label>
                     <div id="editImgPreview" class="mb-2 d-none">
-                        <img id="editImgEl" src="" style="max-height:160px;border-radius:8px;object-fit:cover;" alt="">
+                        <img id="editImgEl" src="" style="max-height:120px;border-radius:8px;object-fit:cover;" alt="">
                         <button type="button" class="btn btn-sm btn-danger ms-2" onclick="removeEditImg()">
                             <i class="bi bi-trash"></i>
                         </button>
                     </div>
-                    <input type="file" class="form-control" id="editImgFile" accept=".jpg,.jpeg,.png,.gif,.webp">
+                    <input type="file" class="form-control form-control-sm" id="editImgFile" accept=".jpg,.jpeg,.png,.gif,.webp">
                 </div>
                 <div class="mb-3">
                     <label class="form-label small fw-semibold">Link video</label>
@@ -140,6 +169,8 @@
 let editModal = null;
 let editHasNewImg = false;
 let editRemoveImg = false;
+let _libDrivePhotoUrl = '';
+let _libDriveStripLoaded = false;
 const loadedProducts = new Set();
 
 function toggleProduct(id) {
@@ -219,9 +250,12 @@ function openCreateForm(maVach, productName) {
     document.getElementById('editModalTitle').textContent = productName
         ? `Thêm phiên bản — ${productName}` : 'Thêm phiên bản content mới';
     editHasNewImg = false; editRemoveImg = false;
+    _libDriveStripLoaded = false;
+    clearLibDriveStrip();
     updateEditCount();
     if (!editModal) editModal = new bootstrap.Modal(document.getElementById('editModal'));
     editModal.show();
+    if (maVach) loadLibDriveStrip(maVach);
 }
 
 function openEditForm(versionId) {
@@ -244,9 +278,12 @@ function openEditForm(versionId) {
             }
             document.getElementById('editModalTitle').textContent = 'Sửa phiên bản content';
             editHasNewImg = false; editRemoveImg = false;
+            _libDriveStripLoaded = false;
+            clearLibDriveStrip();
             updateEditCount();
             if (!editModal) editModal = new bootstrap.Modal(document.getElementById('editModal'));
             editModal.show();
+            loadLibDriveStrip(v.ma_vach);
         });
 }
 
@@ -270,6 +307,7 @@ document.getElementById('editImgFile').addEventListener('change', function() {
             document.getElementById('editImgEl').src = e.target.result;
             document.getElementById('editImgPreview').classList.remove('d-none');
             editHasNewImg = true; editRemoveImg = false;
+            clearLibDriveStrip(); // local upload overrides Drive photo
         };
         reader.readAsDataURL(this.files[0]);
     }
@@ -288,7 +326,12 @@ function saveVersion() {
     fd.append('caption',   document.getElementById('editCaption').value);
     fd.append('post_time', document.getElementById('editPostTime').value);
     fd.append('remove_media', editRemoveImg ? '1' : '0');
-    fd.append('video_url', document.getElementById('editVideoUrl').value);
+    const videoUrl = document.getElementById('editVideoUrl').value;
+    if (_libDrivePhotoUrl && !editHasNewImg && !videoUrl) {
+        fd.append('drive_image_url', _libDrivePhotoUrl);
+    } else {
+        fd.append('video_url', videoUrl);
+    }
     if (editHasNewImg) fd.append('image_file', document.getElementById('editImgFile').files[0]);
     const url = versionId ? `/api/library/${versionId}` : '/api/library';
     fetch(url, { method: 'POST', body: fd })
@@ -321,5 +364,71 @@ document.getElementById('librarySearch').addEventListener('input', function() {
         card.style.display = (!q || card.dataset.search.includes(q)) ? '' : 'none';
     });
 });
+
+// ── Drive photo strip ─────────────────────────────────────────────────────────
+function loadLibDriveStrip(maVach) {
+    if (_libDriveStripLoaded || !maVach) return;
+    _libDriveStripLoaded = true;
+    const grid   = document.getElementById('libDriveStripGrid');
+    const status = document.getElementById('libDriveStripStatus');
+    grid.innerHTML = '<span class="text-muted small"><span class="spinner-border spinner-border-sm me-1"></span>Đang tải…</span>';
+
+    fetch(`/api/drive/photos/${encodeURIComponent(maVach)}`)
+        .then(r => r.json())
+        .then(data => {
+            const photos = data.photos || [];
+            status.textContent = photos.length ? `${photos.length} ảnh` : '';
+            if (!photos.length) {
+                grid.innerHTML = '<span class="text-muted small"><i class="bi bi-image me-1"></i>Chưa có ảnh Drive cho sản phẩm này</span>';
+                return;
+            }
+            grid.innerHTML = '';
+            photos.forEach(ph => {
+                const el = document.createElement('div');
+                el.style.cssText = 'width:66px;height:66px;border-radius:8px;overflow:hidden;cursor:pointer;border:2px solid #e2e8f0;flex-shrink:0;position:relative;';
+                el.title = ph.filename;
+                el.dataset.url = ph.url;
+                el.innerHTML = `<img src="${ph.thumbnail_url || ph.url}" style="width:100%;height:100%;object-fit:cover;display:block;" onerror="this.src='${ph.url}'" alt="">
+                    <div class="lib-strip-check" style="display:none;position:absolute;top:3px;right:3px;background:#1877f2;border-radius:50%;width:18px;height:18px;align-items:center;justify-content:center;">
+                        <i class="bi bi-check2" style="color:#fff;font-size:11px;"></i>
+                    </div>`;
+                el.addEventListener('click', () => selectLibDrivePhoto(el, ph.url, ph.filename));
+                grid.appendChild(el);
+            });
+        })
+        .catch(() => {
+            grid.innerHTML = '<span class="text-muted small">Không tải được ảnh Drive</span>';
+        });
+}
+
+function selectLibDrivePhoto(el, url, filename) {
+    document.querySelectorAll('#libDriveStripGrid > div').forEach(d => {
+        d.style.borderColor = '#e2e8f0';
+        d.querySelector('.lib-strip-check').style.display = 'none';
+    });
+    el.style.borderColor = '#1877f2';
+    el.querySelector('.lib-strip-check').style.display = 'flex';
+
+    document.getElementById('libDriveStripSelectedImg').src = url;
+    document.getElementById('libDriveStripSelectedName').textContent = filename;
+    document.getElementById('libDriveStripSelected').classList.remove('d-none');
+
+    _libDrivePhotoUrl = url;
+    editHasNewImg = false;
+    editRemoveImg = false;
+    document.getElementById('editImgFile').value = '';
+    document.getElementById('editImgPreview').classList.add('d-none');
+}
+
+function clearLibDriveStrip() {
+    document.querySelectorAll('#libDriveStripGrid > div').forEach(d => {
+        d.style.borderColor = '#e2e8f0';
+        const chk = d.querySelector('.lib-strip-check');
+        if (chk) chk.style.display = 'none';
+    });
+    const sel = document.getElementById('libDriveStripSelected');
+    if (sel) sel.classList.add('d-none');
+    _libDrivePhotoUrl = '';
+}
 </script>
 {% endblock %}

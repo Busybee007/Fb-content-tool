@@ -288,11 +288,17 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
-                <input type="text" class="form-control mb-3" id="productSearch"
-                       placeholder="Tìm theo tên, danh mục, mã vạch..."
-                       oninput="filterProducts(this.value.toLowerCase())"
-                       onkeyup="filterProducts(this.value.toLowerCase())"
-                       onpaste="setTimeout(()=>filterProducts(document.getElementById('productSearch').value.toLowerCase()),10)">
+                <div class="input-group mb-3">
+                    <input type="text" class="form-control" id="productSearch"
+                           placeholder="Tìm theo tên, danh mục, mã vạch..."
+                           oninput="filterProducts(this.value.toLowerCase())"
+                           onkeyup="filterProducts(this.value.toLowerCase())"
+                           onpaste="setTimeout(()=>filterProducts(document.getElementById('productSearch').value.toLowerCase()),10)">
+                    <button class="btn btn-outline-primary" type="button"
+                            onclick="filterProducts(document.getElementById('productSearch').value.toLowerCase())">
+                        <i class="bi bi-search"></i>
+                    </button>
+                </div>
                 <div id="productList">
                     {% for p in all_products %}
                     <div class="product-row d-flex align-items-center gap-3 p-2 rounded mb-1"
@@ -670,18 +676,16 @@ function openReplace(slotId, slotName) {
     filterProducts('');
     if (!replaceModal) replaceModal = new bootstrap.Modal(document.getElementById('replaceModal'));
     replaceModal.show();
-    // Dùng requestAnimationFrame để poll realtime (60fps) — bắt mọi kiểu input
-    _searchPoller = true;
-    (function poll() {
-        if (!_searchPoller) return;
+    clearInterval(_searchPoller);
+    _searchPoller = setInterval(() => {
         const val = (document.getElementById('productSearch')?.value || '').toLowerCase();
         if (val !== _lastSearchVal) { _lastSearchVal = val; filterProducts(val); }
-        requestAnimationFrame(poll);
-    })();
+    }, 300);
 }
 
 document.getElementById('replaceModal').addEventListener('hidden.bs.modal', () => {
-    _searchPoller = false;
+    clearInterval(_searchPoller);
+    _searchPoller = null;
 });
 
 function confirmReplace(el) {

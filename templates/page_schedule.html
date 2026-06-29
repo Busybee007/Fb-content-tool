@@ -659,15 +659,29 @@ function updateCardIndicator(maVach, postTime, caption) {
 // ── Thay sản phẩm ────────────────────────────────────────────────────────────
 let replaceModal = null;
 let activeSlotId = null;
+let _searchPoller = null;
+let _lastSearchVal = '';
 
 function openReplace(slotId, slotName) {
     activeSlotId = slotId;
     document.getElementById('replaceSlotName').textContent = 'Slot hiện tại: ' + slotName;
     document.getElementById('productSearch').value = '';
+    _lastSearchVal = '';
     filterProducts('');
     if (!replaceModal) replaceModal = new bootstrap.Modal(document.getElementById('replaceModal'));
     replaceModal.show();
+    // Poll input value mỗi 150ms — bắt mọi kiểu gõ kể cả Unikey/IME
+    clearInterval(_searchPoller);
+    _searchPoller = setInterval(() => {
+        const val = (document.getElementById('productSearch')?.value || '').toLowerCase();
+        if (val !== _lastSearchVal) { _lastSearchVal = val; filterProducts(val); }
+    }, 150);
 }
+
+document.getElementById('replaceModal').addEventListener('hidden.bs.modal', () => {
+    clearInterval(_searchPoller);
+    _searchPoller = null;
+});
 
 function confirmReplace(el) {
     const productId = parseInt(el.dataset.id);
